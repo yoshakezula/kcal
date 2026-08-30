@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kcal — Settings</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body class="settings-page">
+  <div class="settings-card">
+    <h1>Calendars</h1>
+
+    {% if cal_error %}
+      <p class="settings-error">
+        Not connected yet: {{ cal_error }}
+      </p>
+      <p>
+        Run <code>python authorize.py</code> from a terminal in this project's
+        folder, then reload this page.
+      </p>
+    {% else %}
+      <p class="settings-hint">Choose which calendars to show on the kiosk display.</p>
+      <form method="post">
+        <ul class="calendar-list">
+          {% for cal in calendars %}
+            <li>
+              <label class="calendar-option">
+                <input
+                  type="checkbox"
+                  name="calendar_id"
+                  value="{{ cal.id }}"
+                  {% if cal.id in selected %}checked{% endif %}
+                />
+                <span class="calendar-color" style="background-color: {{ cal.color }};"></span>
+                <span class="calendar-name">{{ cal.summary }}</span>
+              </label>
+            </li>
+          {% endfor %}
+        </ul>
+        <button type="submit" class="save-button">Save</button>
+      </form>
+    {% endif %}
+
+    <p class="back-link"><a href="{{ url_for('index') }}">&larr; Back to calendar</a></p>
+  </div>
+
+  <div class="settings-card">
+    <h1>Tasks</h1>
+    {% if task_error %}
+      <p class="settings-error">
+        Not connected yet: {{ task_error }}
+      </p>
+      <p>
+        Run <code>python authorize.py</code> from a terminal in this project's
+        folder, then reload this page.
+      </p>
+    {% else %}
+      <p class="settings-hint">Choose which task list opens by default on the kiosk display.</p>
+      <form method="post" action="{{ url_for('settings_tasks') }}" class="tasklist-form">
+        <select name="task_list_id">
+          {% for tl in task_lists %}
+            <option value="{{ tl.id }}" {% if tl.id == selected_task_list %}selected{% endif %}>{{ tl.title }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="save-button">Save</button>
+      </form>
+    {% endif %}
+  </div>
+
+  <div class="settings-card">
+    <h1>Weather Location</h1>
+    <p class="settings-hint">Zip code to show a 7-day forecast at the top of the kiosk view.</p>
+    {% if zip_error %}
+      <p class="settings-error">{{ zip_error }}</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('settings_location') }}" class="location-form">
+      <input
+        type="text"
+        name="zip_code"
+        value="{{ zip_code }}"
+        inputmode="numeric"
+        autocomplete="postal-code"
+        placeholder="90008"
+      />
+      <button type="submit" class="save-button">Save</button>
+    </form>
+  </div>
+</body>
+</html>
