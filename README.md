@@ -167,9 +167,9 @@ and the `token.json` it produces into this project's folder on the Pi.
 
    [Service]
    Type=simple
-   User=pi
-   WorkingDirectory=/home/pi/Kcal
-   ExecStart=/usr/bin/python3 /home/pi/Kcal/app.py
+   User=username
+   WorkingDirectory=/home/username/src/kcal
+   ExecStart=/usr/bin/python3 /home/username/src/kcal/app.py
    Restart=on-failure
 
    [Install]
@@ -211,20 +211,20 @@ and the `token.json` it produces into this project's folder on the Pi.
 any, pulls and restarts `kcal.service`. Run it on a schedule with cron so the
 Pi picks up whatever you push without any manual step:
 
-1. **Let `pi` restart the service without a password prompt** (cron runs
+1. **Let the service user restart it without a password prompt** (cron runs
    non-interactively, so `sudo systemctl restart` needs to not ask for one).
    Run `sudo visudo -f /etc/sudoers.d/kcal-restart` and add:
    ```
-   pi ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart kcal.service
+   username ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart kcal.service
    ```
 2. **Make the script executable**:
    ```
-   chmod +x /home/pi/Kcal/update.sh
+   chmod +x /home/username/src/kcal/update.sh
    ```
 3. **Add a cron entry** — `crontab -e`, then add (checks every 5 minutes;
    adjust to taste):
    ```
-   */5 * * * * /home/pi/Kcal/update.sh >> /home/pi/kcal-update.log 2>&1
+   */5 * * * * /home/username/src/kcal/update.sh >> /home/username/kcal-update.log 2>&1
    ```
 
 Push to `main` from your dev machine as usual — within one interval, the Pi
