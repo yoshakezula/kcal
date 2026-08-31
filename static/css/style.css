@@ -104,14 +104,6 @@ button, a {
   flex: 1 1 auto;
 }
 
-.clock {
-  font-size: 15px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-  margin-right: 8px;
-  white-space: nowrap;
-}
-
 .view-toggle {
   display: flex;
   background: var(--bg);
@@ -969,7 +961,8 @@ body.settings-page {
 }
 
 .back-link {
-  margin-top: 16px;
+  max-width: 480px;
+  margin: 32px auto 0;
 }
 
 .back-link a {

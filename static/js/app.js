@@ -31,7 +31,6 @@
   const el = {
     content: document.getElementById("content"),
     rangeLabel: document.getElementById("rangeLabel"),
-    clock: document.getElementById("clock"),
     monthBtn: document.getElementById("monthBtn"),
     weekBtn: document.getElementById("weekBtn"),
     week2Btn: document.getElementById("week2Btn"),
@@ -972,15 +971,6 @@
       if (VIEW_GRID_WEEKS[state.view]) render();
     }, 200);
   });
-
-  // ---------- Clock ----------
-
-  function tickClock() {
-    const now = new Date();
-    el.clock.textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  }
-  tickClock();
-  setInterval(tickClock, 15000);
 
   // ---------- Auto-refresh ----------
 
