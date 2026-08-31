@@ -256,6 +256,16 @@ worth trying first if you'd rather skip the reservation step.
   revoked. Re-run `python authorize.py`.
 - **A calendar you checked in Settings shows no events**: make sure it's
   actually shared with/owned by the account you authorized in step 3.
+- **Internal Server Error / `PermissionError` on `token.json`** (common on
+  Linux/Raspberry Pi after copying `token.json` over with `scp` as a
+  different user, e.g. root): the app couldn't write the refreshed token
+  back to disk because the file isn't owned by whichever user is running
+  `app.py`. Fix ownership to match the current user and re-run:
+  ```
+  sudo chown "$(whoami):$(whoami)" token.json config.json
+  chmod 600 token.json
+  sudo systemctl restart kcal.service   # if running as a systemd service
+  ```
 - **Wrong day boundaries for all-day events**: the app uses the host
   computer's local timezone for all date math — make sure the kiosk
   machine's system clock/timezone is set correctly.
