@@ -10,7 +10,7 @@
   const WEATHER_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
   const SWIPE_THRESHOLD_PX = 60;
   const GRID_WEEKS = 4; // the "month" grid is a rolling 4-week window, not a calendar month
-  const FORECAST_BAR_HEIGHT = 26; // px, height of each metric's scaled bar track
+  const TALL_FORECAST_VIEWS = new Set(["week", "week2", "week3", "list"]);
 
   // Grid-style views (month + the multi-week views) all share the same
   // week-row rendering, just with a different row count.
@@ -206,20 +206,24 @@
     const tempSpan = Math.max(tempMax - tempMin, 1);
     const today = new Date();
 
+    // Bar position/height are percentages of the track's own box, so the
+    // bars fill whatever height the flex layout gives the track (a short
+    // track in normal views, a tall one in the "tall" views) instead of a
+    // fixed pixel size that would leave dead space in a taller strip.
     const daysHtml = forecast
       .map((day) => {
         const [y, m, d] = day.date.split("-").map(Number);
         const dayDate = new Date(y, m - 1, d);
         const dayLabel = isSameDay(dayDate, today) ? "Today" : WEEKDAY_NAMES[dayDate.getDay()];
 
-        const tempTop = ((tempMax - day.high) / tempSpan) * FORECAST_BAR_HEIGHT;
-        const tempHeight = Math.max(((day.high - day.low) / tempSpan) * FORECAST_BAR_HEIGHT, 3);
+        const tempTop = ((tempMax - day.high) / tempSpan) * 100;
+        const tempHeight = Math.max(((day.high - day.low) / tempSpan) * 100, 8);
 
         const humHigh = day.humidityHigh;
         const humLow = day.humidityLow;
         const hasHumidity = humHigh != null && humLow != null;
-        const humTop = hasHumidity ? ((100 - humHigh) / 100) * FORECAST_BAR_HEIGHT : 0;
-        const humHeight = hasHumidity ? Math.max(((humHigh - humLow) / 100) * FORECAST_BAR_HEIGHT, 3) : 0;
+        const humTop = hasHumidity ? ((100 - humHigh) / 100) * 100 : 0;
+        const humHeight = hasHumidity ? Math.max(((humHigh - humLow) / 100) * 100, 8) : 0;
 
         return `
           <div class="forecast-day ${isSameDay(dayDate, today) ? "today" : ""}" data-date="${day.date}">
@@ -228,17 +232,17 @@
             <div class="forecast-metrics">
               <div class="forecast-metric">
                 <span class="forecast-value">${day.high}&deg;</span>
-                <div class="forecast-track" style="height:${FORECAST_BAR_HEIGHT}px">
-                  <div class="forecast-bar forecast-bar-temp" style="top:${tempTop}px;height:${tempHeight}px"></div>
+                <div class="forecast-track">
+                  <div class="forecast-bar forecast-bar-temp" style="top:${tempTop}%;height:${tempHeight}%"></div>
                 </div>
                 <span class="forecast-value forecast-value-low">${day.low}&deg;</span>
               </div>
               <div class="forecast-metric">
                 <span class="forecast-value">${hasHumidity ? humHigh + "%" : "–"}</span>
-                <div class="forecast-track" style="height:${FORECAST_BAR_HEIGHT}px">
+                <div class="forecast-track">
                   ${
                     hasHumidity
-                      ? `<div class="forecast-bar forecast-bar-humidity" style="top:${humTop}px;height:${humHeight}px"></div>`
+                      ? `<div class="forecast-bar forecast-bar-humidity" style="top:${humTop}%;height:${humHeight}%"></div>`
                       : ""
                   }
                 </div>
@@ -423,6 +427,9 @@
   function updateForecastVisibility() {
     const shouldShow = state.view !== "month" && lastForecast && lastForecast.length > 0;
     el.forecastStrip.classList.toggle("hidden", !shouldShow);
+    el.forecastStrip.classList.toggle("forecast-strip-tall", TALL_FORECAST_VIEWS.has(state.view));
+    // Re-render so the bar-chart scale (short vs. tall) matches the new view.
+    if (shouldShow) renderForecast(lastForecast);
   }
 
   async function loadWeather() {
