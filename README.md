@@ -125,6 +125,8 @@ This uses [Open-Meteo](https://open-meteo.com/), which needs no API key.
 
 ## 5. Run it full-screen on the kiosk computer
 
+### Windows
+
 Double-click `launch_kiosk.bat`. It starts the server in the background and
 opens **http://127.0.0.1:5000** in Chrome's `--kiosk` mode (true full-screen,
 no browser chrome). If Chrome isn't installed/on your PATH, edit the `.bat`
@@ -136,6 +138,72 @@ shortcut to `launch_kiosk.bat` into the folder that opens.
 
 If you'd rather not use kiosk mode, just visit the site in any browser and
 tap the fullscreen icon in the header.
+
+### Raspberry Pi (Linux)
+
+This assumes the **Raspberry Pi OS with desktop** image (not Lite) and an
+HDMI display connected to the Pi.
+
+If the Pi is headless over SSH, `python authorize.py` (step 3) can't open a
+real graphical browser there, and Google's sign-in page will reject the
+text-mode browser Python falls back to ("doesn't support JavaScript"). The
+easiest fix: run `authorize.py` once on a different machine that has a
+normal browser (same `client_secret.json`), then copy the `client_secret.json`
+and the `token.json` it produces into this project's folder on the Pi.
+`token.json` refreshes itself from then on, so this is a one-time transfer.
+
+1. **Enable desktop autologin** so the Pi boots straight into a desktop
+   session without needing a keyboard to log in:
+   ```
+   sudo raspi-config nonint do_boot_behaviour B4
+   ```
+2. **Run the Flask app as a systemd service**, so it starts on boot and
+   restarts automatically if it ever crashes. Create
+   `/etc/systemd/system/kcal.service`:
+   ```ini
+   [Unit]
+   Description=Kcal calendar kiosk
+   After=network.target
+
+   [Service]
+   Type=simple
+   User=pi
+   WorkingDirectory=/home/pi/Kcal
+   ExecStart=/usr/bin/python3 /home/pi/Kcal/app.py
+   Restart=on-failure
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   Adjust `User`/`WorkingDirectory`/`ExecStart` to match wherever you put the
+   project and whichever Python/venv you're using. Then:
+   ```
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now kcal.service
+   ```
+3. **Launch Chromium in kiosk mode** on desktop login. Recent Raspberry Pi OS
+   (Bookworm) uses the **labwc** Wayland compositor by default — create
+   `~/.config/labwc/autostart`:
+   ```sh
+   #!/bin/sh
+   until curl -s http://127.0.0.1:5000 > /dev/null; do sleep 1; done
+   chromium-browser --kiosk --noerrdialogs --disable-infobars \
+     --disable-session-crashed-bubble --check-for-update-interval=31536000 \
+     --incognito http://127.0.0.1:5000 &
+   ```
+   ```
+   chmod +x ~/.config/labwc/autostart
+   ```
+   The `curl` wait loop keeps Chromium from launching before the systemd
+   service is ready. (If your image still defaults to the older Wayfire
+   compositor instead of labwc, add the same `chromium-browser ...` line
+   under an `[autostart]` section in `~/.config/wayfire.ini` instead — check
+   which one is active with `dpkg -l | grep -E '^ii.*(labwc|wayfire)'`.)
+4. **Disable screen blanking** so the display doesn't sleep:
+   ```
+   sudo raspi-config nonint do_blanking 1
+   ```
+5. Reboot. It should come up directly into the kiosk view.
 
 ## 6. Access it from other devices on your network
 
