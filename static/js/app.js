@@ -30,6 +30,8 @@
 
   const el = {
     content: document.getElementById("content"),
+    contentInner: document.getElementById("contentInner"),
+    loadingOverlay: document.getElementById("loadingOverlay"),
     rangeLabel: document.getElementById("rangeLabel"),
     monthBtn: document.getElementById("monthBtn"),
     weekBtn: document.getElementById("weekBtn"),
@@ -159,12 +161,14 @@
     return { start: weekStart, end: addDays(weekStart, 6) };
   }
 
-  async function loadEvents() {
+  async function loadEvents(opts) {
+    const silent = !!(opts && opts.silent);
     const range = visibleRange();
     currentRange = range;
     const url = `/api/events?start=${dateKey(range.start)}&end=${dateKey(range.end)}`;
 
     el.refreshBtn.classList.add("spinning");
+    if (!silent) showLoading(true);
     try {
       let response;
       try {
@@ -188,7 +192,12 @@
       render();
     } finally {
       el.refreshBtn.classList.remove("spinning");
+      if (!silent) showLoading(false);
     }
+  }
+
+  function showLoading(show) {
+    el.loadingOverlay.classList.toggle("hidden", !show);
   }
 
   function showDisconnected(show) {
@@ -546,10 +555,10 @@
   // from the DOM. Returns null if there's nothing on screen to measure yet
   // (e.g. the visible range has zero events, so there's no chip to sample).
   function computeMonthChipCapacity() {
-    const cellEl = el.content.querySelector(".day-cell");
-    const numberEl = el.content.querySelector(".day-number");
-    const eventsEl = el.content.querySelector(".day-events");
-    const chipEl = el.content.querySelector(".event-chip");
+    const cellEl = el.contentInner.querySelector(".day-cell");
+    const numberEl = el.contentInner.querySelector(".day-number");
+    const eventsEl = el.contentInner.querySelector(".day-events");
+    const chipEl = el.contentInner.querySelector(".event-chip");
     if (!cellEl || !numberEl || !eventsEl || !chipEl) return null;
 
     const cellStyle = getComputedStyle(cellEl);
@@ -569,7 +578,7 @@
   }
 
   function attachDayCellHandlers(byDay) {
-    el.content.querySelectorAll(".day-cell").forEach((cellEl) => {
+    el.contentInner.querySelectorAll(".day-cell").forEach((cellEl) => {
       cellEl.addEventListener("click", () => {
         const key = cellEl.getAttribute("data-date-key");
         openDayOverlay(key, byDay.get(key) || []);
@@ -585,12 +594,12 @@
 
     // First pass: render with the last-known-good chip capacity so there's
     // something on screen to measure against real, laid-out dimensions.
-    el.content.innerHTML = buildMonthGridHtml(gridStart, byDay, today, monthChipCapacity, numWeeks);
+    el.contentInner.innerHTML = buildMonthGridHtml(gridStart, byDay, today, monthChipCapacity, numWeeks);
 
     const measured = computeMonthChipCapacity();
     if (measured !== null && measured !== monthChipCapacity) {
       monthChipCapacity = measured;
-      el.content.innerHTML = buildMonthGridHtml(gridStart, byDay, today, monthChipCapacity, numWeeks);
+      el.contentInner.innerHTML = buildMonthGridHtml(gridStart, byDay, today, monthChipCapacity, numWeeks);
     }
 
     attachDayCellHandlers(byDay);
@@ -641,9 +650,9 @@
         </div>`;
     }
 
-    el.content.innerHTML = `<div class="week-columns">${colsHtml}</div>`;
+    el.contentInner.innerHTML = `<div class="week-columns">${colsHtml}</div>`;
 
-    el.content.querySelectorAll(".week-col-event").forEach((rowEl) => {
+    el.contentInner.querySelectorAll(".week-col-event").forEach((rowEl) => {
       rowEl.addEventListener("click", () => {
         const key = rowEl.getAttribute("data-date-key");
         const id = rowEl.getAttribute("data-event-id");
@@ -689,9 +698,9 @@
         </section>`;
     }
 
-    el.content.innerHTML = `<div class="week-list">${sectionsHtml}</div>`;
+    el.contentInner.innerHTML = `<div class="week-list">${sectionsHtml}</div>`;
 
-    el.content.querySelectorAll(".week-event-row").forEach((rowEl) => {
+    el.contentInner.querySelectorAll(".week-event-row").forEach((rowEl) => {
       rowEl.addEventListener("click", () => {
         const key = rowEl.getAttribute("data-date-key");
         const id = rowEl.getAttribute("data-event-id");
@@ -975,7 +984,7 @@
   // ---------- Auto-refresh ----------
 
   refreshTimer = setInterval(() => {
-    if (document.visibilityState === "visible") loadEvents();
+    if (document.visibilityState === "visible") loadEvents({ silent: true });
   }, REFRESH_INTERVAL_MS);
   setInterval(() => {
     if (document.visibilityState === "visible") loadWeather();
