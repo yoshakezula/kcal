@@ -7,7 +7,7 @@
   --accent: #1a73e8;
   --today-bg: #e8f0fe;
   --header-h: 48px;
-  --forecast-h: 76px;
+  --forecast-h: 108px;
   --temp-color: #eb6834;
   --humidity-color: #2a78d6;
   --precip-color: #1a9e8f;
@@ -186,7 +186,7 @@ button, a {
 }
 
 .forecast-strip.forecast-strip-tall {
-  flex-basis: 160px;
+  flex-basis: 200px;
 }
 
 .forecast-legend {
@@ -194,7 +194,7 @@ button, a {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   padding-right: 10px;
   border-right: 1px solid var(--border);
 }
@@ -203,14 +203,14 @@ button, a {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
 .forecast-swatch {
-  width: 9px;
-  height: 9px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   flex: 0 0 auto;
 }
@@ -253,14 +253,14 @@ button, a {
 }
 
 .forecast-day-label {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.1;
 }
 
 .forecast-icon {
-  font-size: 14px;
-  line-height: 1;
+  font-size: 24px;
+  line-height: 1.3;
 }
 
 .forecast-metrics {
@@ -280,7 +280,7 @@ button, a {
 }
 
 .forecast-value {
-  font-size: 10px;
+  font-size: 13px;
   line-height: 1.1;
   font-weight: 600;
   color: var(--text);
@@ -294,7 +294,7 @@ button, a {
 
 .forecast-track {
   position: relative;
-  width: 10px;
+  width: 13px;
   flex: 1 1 auto;
   min-height: 0;
 }
