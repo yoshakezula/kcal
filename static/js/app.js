@@ -1248,10 +1248,16 @@
     wakeFromSleep();
     armSleepTimer();
     if (e.pointerType !== "touch") return;
+    // Chromium reports touch clientX/Y in unzoomed physical pixels, but
+    // `html { zoom }` (used for the ui_scale setting) positions fixed
+    // elements in the zoomed layout space — mouse coordinates get corrected
+    // for zoom automatically, touch coordinates don't. Undo that here or
+    // the ripple lands off from the actual touch point whenever ui_scale != 1.
+    const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
     const ripple = document.createElement("div");
     ripple.className = "touch-ripple";
-    ripple.style.left = `${e.clientX}px`;
-    ripple.style.top = `${e.clientY}px`;
+    ripple.style.left = `${e.clientX / zoom}px`;
+    ripple.style.top = `${e.clientY / zoom}px`;
     ripple.addEventListener("animationend", () => ripple.remove());
     document.body.appendChild(ripple);
   });
