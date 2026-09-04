@@ -151,6 +151,8 @@
 
   let currentRange = null; // {start: Date, end: Date} last fetched
   let refreshTimer = null;
+  let listNextDay = null; // next day to append when the list view is scrolled to the bottom
+  let listLoadingMore = false;
 
   function visibleRange() {
     const gridWeeks = VIEW_GRID_WEEKS[state.view];
@@ -162,11 +164,21 @@
     return { start: weekStart, end: addDays(weekStart, 6) };
   }
 
+  // Always fetched relative to the anchor's week, regardless of which view
+  // is active, so switching views never needs a new fetch - every view's
+  // visibleRange() (at most GRID_WEEKS wide) is a subset of this window.
+  function fetchRange() {
+    const gridStart = startOfWeek(state.anchor);
+    return { start: gridStart, end: addDays(gridStart, GRID_WEEKS * 7 - 1) };
+  }
+
   async function loadEvents(opts) {
     const silent = !!(opts && opts.silent);
-    const range = visibleRange();
+    const range = fetchRange();
     currentRange = range;
     const url = `/api/events?start=${dateKey(range.start)}&end=${dateKey(range.end)}`;
+
+    loadTasksData(); // kick off in parallel; the Tasks overlay shouldn't wait on this, nor should events
 
     el.refreshBtn.classList.add("spinning");
     if (!silent) showLoading(true);
@@ -689,52 +701,98 @@
     });
   }
 
-  function renderList() {
-    const weekStart = startOfWeek(state.anchor);
-    const weekEnd = addDays(weekStart, 6);
-    const byDay = eventsByDay(weekStart, weekEnd);
+  function buildListDaySectionHtml(day, byDay, today) {
+    const key = dateKey(day);
+    const dayEvents = sortDayEvents(byDay.get(key) || []);
+    const isToday = isSameDay(day, today);
+
+    const rowsHtml = dayEvents.length
+      ? dayEvents
+          .map(
+            (evt) => `
+        <div class="week-event-row" data-event-id="${evt.id}">
+          <div class="week-event-dot" style="background-color:${evt.color}"></div>
+          <div class="week-event-title">${escapeHtml(evt.title)}</div>
+          <div class="week-event-time">${eventTimeLabel(evt)}</div>
+        </div>`
+          )
+          .join("")
+      : `<div class="week-day-empty">No events</div>`;
+
+    return `
+      <section class="week-day-section">
+        <div class="week-day-header ${isToday ? "today" : ""}">
+          <span class="day-name">${WEEKDAY_NAMES[day.getDay()]}</span>
+          <span class="day-date">${MONTH_NAMES[day.getMonth()].slice(0, 3)} ${day.getDate()}</span>
+        </div>
+        ${rowsHtml}
+      </section>`;
+  }
+
+  // Appends `count` more days of sections to the list view without touching
+  // what's already rendered, so scroll position is preserved while loading more.
+  function appendListDays(startDay, count) {
+    const endDay = addDays(startDay, count - 1);
+    const byDay = eventsByDay(startDay, endDay);
     const today = new Date();
 
     let sectionsHtml = "";
-    for (let i = 0; i < 7; i++) {
-      const day = addDays(weekStart, i);
-      const key = dateKey(day);
-      const dayEvents = sortDayEvents(byDay.get(key) || []);
-      const isToday = isSameDay(day, today);
+    for (let i = 0; i < count; i++) {
+      sectionsHtml += buildListDaySectionHtml(addDays(startDay, i), byDay, today);
+    }
+    el.contentInner.querySelector(".week-list").insertAdjacentHTML("beforeend", sectionsHtml);
+    listNextDay = addDays(endDay, 1);
+  }
 
-      const rowsHtml = dayEvents.length
-        ? dayEvents
-            .map(
-              (evt) => `
-          <div class="week-event-row" data-event-id="${evt.id}" data-date-key="${key}">
-            <div class="week-event-dot" style="background-color:${evt.color}"></div>
-            <div class="week-event-title">${escapeHtml(evt.title)}</div>
-            <div class="week-event-time">${eventTimeLabel(evt)}</div>
-          </div>`
-            )
-            .join("")
-        : `<div class="week-day-empty">No events</div>`;
+  // Fetches another week of events once the loaded range runs out, then
+  // appends the next 7 days to the list.
+  async function loadMoreListDays() {
+    if (listLoadingMore || !listNextDay) return;
+    const chunkStart = listNextDay;
+    const chunkEnd = addDays(chunkStart, 6);
 
-      sectionsHtml += `
-        <section class="week-day-section">
-          <div class="week-day-header ${isToday ? "today" : ""}">
-            <span class="day-name">${WEEKDAY_NAMES[day.getDay()]}</span>
-            <span class="day-date">${MONTH_NAMES[day.getMonth()].slice(0, 3)} ${day.getDate()}</span>
-          </div>
-          ${rowsHtml}
-        </section>`;
+    if (chunkEnd > currentRange.end) {
+      listLoadingMore = true;
+      try {
+        const fetchStart = addDays(currentRange.end, 1);
+        const response = await fetch(`/api/events?start=${dateKey(fetchStart)}&end=${dateKey(chunkEnd)}`);
+        if (!response.ok) return; // retry on next scroll
+        const data = await response.json();
+        const existingIds = new Set(state.events.map((e) => e.id));
+        for (const evt of data.events || []) {
+          if (!existingIds.has(evt.id)) state.events.push(evt);
+        }
+        currentRange.end = chunkEnd;
+      } catch (err) {
+        return; // transient network error: retry on next scroll
+      } finally {
+        listLoadingMore = false;
+      }
     }
 
-    el.contentInner.innerHTML = `<div class="week-list">${sectionsHtml}</div>`;
+    appendListDays(chunkStart, 7);
+  }
 
-    el.contentInner.querySelectorAll(".week-event-row").forEach((rowEl) => {
-      rowEl.addEventListener("click", () => {
-        const key = rowEl.getAttribute("data-date-key");
-        const id = rowEl.getAttribute("data-event-id");
-        const evt = (byDay.get(key) || []).find((e) => e.id === id);
-        if (evt) openEventOverlay(evt);
-      });
+  function renderList() {
+    const weekStart = startOfWeek(state.anchor);
+    el.contentInner.innerHTML = `<div class="week-list"></div>`;
+    const listEl = el.contentInner.querySelector(".week-list");
+
+    listEl.addEventListener("click", (e) => {
+      const rowEl = e.target.closest(".week-event-row");
+      if (!rowEl) return;
+      const id = rowEl.getAttribute("data-event-id");
+      const evt = state.events.find((ev) => ev.id === id);
+      if (evt) openEventOverlay(evt);
     });
+
+    listEl.addEventListener("scroll", () => {
+      if (listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 300) {
+        loadMoreListDays();
+      }
+    });
+
+    appendListDays(weekStart, 7);
   }
 
   function escapeHtml(str) {
@@ -857,7 +915,10 @@
     tasks: [],
     pointsEnabled: false,
     totalPoints: 0,
+    loaded: false, // true once a load attempt (success or failure) has completed
+    loadOk: false,
   };
+  let tasksPromise = null; // in-flight load, so callers can await instead of duplicating the fetch
 
   function escapeAttr(str) {
     return String(str).replace(/"/g, "&quot;");
@@ -930,12 +991,13 @@
     }
   }
 
-  async function loadTasksForSelectedList() {
+  async function loadTasksForSelectedList(opts) {
+    const silent = !!(opts && opts.silent);
     if (!taskState.selectedListId) {
       taskState.tasks = [];
       taskState.pointsEnabled = false;
       taskState.totalPoints = 0;
-      renderTasksOverlay();
+      if (!silent) renderTasksOverlay();
       return;
     }
     try {
@@ -949,13 +1011,37 @@
       taskState.pointsEnabled = false;
       taskState.totalPoints = 0;
     }
-    renderTasksOverlay();
+    if (!silent) renderTasksOverlay();
+  }
+
+  // Loads task lists + the selected list's tasks, sharing one in-flight
+  // promise so a background prefetch (triggered on every calendar reload)
+  // and an overlay open racing it don't fire duplicate requests. Resolves
+  // `tasksPromise` back to null when done so the next calendar reload
+  // refetches fresh data instead of relying on a stale cache forever.
+  function loadTasksData() {
+    if (tasksPromise) return tasksPromise;
+    tasksPromise = (async () => {
+      try {
+        const ok = await loadTaskLists();
+        taskState.loadOk = ok;
+        if (ok && taskState.taskLists.length) {
+          await loadTasksForSelectedList({ silent: true });
+        }
+      } finally {
+        taskState.loaded = true;
+        tasksPromise = null;
+      }
+    })();
+    return tasksPromise;
   }
 
   async function openTasksOverlay() {
-    openOverlay(`<h2>Tasks</h2><p>Loading&hellip;</p>`);
-    const ok = await loadTaskLists();
-    if (!ok) {
+    if (!taskState.loaded) {
+      openOverlay(`<h2>Tasks</h2><p>Loading&hellip;</p>`);
+      await loadTasksData();
+    }
+    if (!taskState.loadOk) {
       openOverlay(`<h2>Tasks</h2><p>Couldn't load task lists. Check Settings.</p>`);
       return;
     }
@@ -963,7 +1049,7 @@
       openOverlay(`<h2>Tasks</h2><p>No task lists found.</p>`);
       return;
     }
-    await loadTasksForSelectedList();
+    renderTasksOverlay();
   }
 
   async function toggleTask(taskId) {
@@ -1026,7 +1112,7 @@
     el.week3Btn.classList.toggle("active", view === "week3");
     el.listBtn.classList.toggle("active", view === "list");
     updateForecastVisibility();
-    loadEvents();
+    render();
   }
 
   el.todayBtn.addEventListener("click", goToday);
@@ -1097,14 +1183,14 @@
   // ---------- Auto-refresh ----------
 
   refreshTimer = setInterval(() => {
-    if (document.visibilityState === "visible") loadEvents({ silent: true });
+    if (document.visibilityState === "visible") loadEvents({ silent: state.events.length > 0 });
   }, REFRESH_INTERVAL_MS);
   setInterval(() => {
     if (document.visibilityState === "visible") loadWeather();
   }, WEATHER_REFRESH_INTERVAL_MS);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      loadEvents();
+      loadEvents({ silent: state.events.length > 0 });
       loadWeather();
     }
   });
