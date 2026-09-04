@@ -228,6 +228,38 @@ and use **cage** — a minimal Wayland compositor that just runs one
 fullscreen app, with no desktop/panel/window-manager overhead — instead of
 labwc/Wayfire.
 
+`setup_pi_kiosk.sh` (in this repo) automates steps 2-6 below and handles
+the rest. After step 1 (flashing the OS) and cloning this repo onto the Pi,
+run it from inside the repo:
+```
+sudo sh setup_pi_kiosk.sh
+```
+
+**Specifying the username**: the kiosk's autologin session and
+`kcal.service` both run as a specific Linux user account, which varies
+depending on the machine (whatever account you created when imaging the SD
+card — `pi` on older images, something else if you set a custom username in
+Raspberry Pi Imager). The script *requires* this — there's no guessed
+default, since a wrong guess would silently misconfigure the kiosk to run
+as the wrong user. You must either:
+- **Answer the interactive prompt**:
+  ```
+  Username to run the kiosk as:
+  ```
+  Leaving it blank (just pressing Enter) is treated as not specifying
+  one — the script errors out with a message telling you to provide one,
+  rather than guessing.
+- **Pass it as the first argument** instead, to skip the prompt entirely
+  (useful for scripted/non-interactive setup):
+  ```
+  sudo sh setup_pi_kiosk.sh yoshakezula
+  ```
+
+It's safe to re-run either way. Steps 7-8 (screen resolution and the
+reboot) are included as optional interactive prompts at the end regardless
+of which form you use. Or follow the steps by hand below if you'd rather
+see what's happening at each stage.
+
 1. **Flash Raspberry Pi OS Lite** (64-bit) instead of the desktop image.
 2. **Enable console autologin** so it boots straight to a logged-in shell on
    tty1:
@@ -241,6 +273,15 @@ labwc/Wayfire.
    ```
    (`--no-install-recommends` skips each package's optional extras — smaller
    install, faster on a Zero 2 W's SD card.)
+
+   Also install a color emoji font — the weather forecast strip uses actual
+   Unicode emoji (☀️ ⛅ 🌦️ etc.) for its icons, and Lite has no desktop
+   packages installed, so without this they render as blank boxes/missing
+   glyphs instead of the actual icon:
+   ```
+   sudo apt install --no-install-recommends -y fonts-noto-color-emoji
+   sudo fc-cache -f
+   ```
 4. **Run the Flask app as a systemd service** — same `kcal.service` as
    above.
 5. **Launch cage + Chromium on login** by appending this to

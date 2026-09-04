@@ -5,10 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Kcal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  {% if ui_scale and ui_scale != 1.0 %}
+  <style>html { zoom: {{ ui_scale }}; }</style>
+  {% endif %}
 </head>
-<body>
+<body class="{{ 'show-cursor' if show_cursor else '' }}">
   <div id="app">
-    <header class="app-header">
+    <header class="app-header" id="appHeader">
       <button class="icon-button" id="todayBtn" aria-label="Today">Today</button>
       <button class="icon-button nav-button" id="prevBtn" aria-label="Previous">&#8249;</button>
       <button class="icon-button nav-button" id="nextBtn" aria-label="Next">&#8250;</button>
@@ -53,6 +56,8 @@
   </div>
 
   <canvas id="confettiCanvas" class="confetti-canvas hidden"></canvas>
+
+  <div id="sleepScreen" class="sleep-screen"></div>
 
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

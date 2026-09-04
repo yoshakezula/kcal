@@ -18,6 +18,10 @@
   cursor: none;
 }
 
+body.show-cursor * {
+  cursor: auto;
+}
+
 .touch-ripple {
   position: fixed;
   width: 48px;
@@ -979,6 +983,23 @@ button, a {
   pointer-events: none;
 }
 
+/* ---------- Sleep screen ---------- */
+
+.sleep-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 800ms ease;
+}
+
+.sleep-screen.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .confetti-canvas.hidden {
   display: none;
 }
@@ -1090,4 +1111,21 @@ body.settings-page {
   border-radius: 10px;
   background: var(--surface);
   color: var(--text);
+}
+
+.display-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.display-form input[type="range"] {
+  flex: 1 1 auto;
+}
+
+.display-form #uiScaleLabel {
+  min-width: 3.5em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
 }

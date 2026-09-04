@@ -6,7 +6,7 @@
   <title>Kcal — Settings</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
-<body class="settings-page">
+<body class="settings-page {{ 'show-cursor' if show_cursor else '' }}">
   <p class="back-link"><a href="{{ url_for('index') }}">&larr; Back to calendar</a></p>
 
   <div class="settings-card">
@@ -78,6 +78,24 @@
         <input type="checkbox" name="points_tracking" {% if points_tracking %}checked{% endif %} />
         <span class="calendar-name">Enable points tracking</span>
       </label>
+      <button type="submit" class="save-button">Save</button>
+    </form>
+  </div>
+
+  <div class="settings-card">
+    <h1>Display Size</h1>
+    <p class="settings-hint">Scale the whole kiosk view bigger or smaller — handy if the screen's native resolution makes things too small or too large.</p>
+    <form method="post" action="{{ url_for('settings_display') }}" class="display-form">
+      <input
+        type="range"
+        name="ui_scale"
+        min="0.7"
+        max="1.8"
+        step="0.05"
+        value="{{ ui_scale }}"
+        oninput="document.getElementById('uiScaleLabel').textContent = Math.round(this.value * 100) + '%'"
+      />
+      <span id="uiScaleLabel">{{ (ui_scale * 100) | round | int }}%</span>
       <button type="submit" class="save-button">Save</button>
     </form>
   </div>

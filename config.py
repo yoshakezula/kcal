@@ -14,6 +14,7 @@ DEFAULTS = {
     "zip_code": "90008",
     "task_list_id": None,
     "points_tracking": False,
+    "ui_scale": 1.0,
 }
 
 
@@ -69,4 +70,18 @@ def get_points_tracking():
 def set_points_tracking(enabled):
     config = load_config()
     config["points_tracking"] = bool(enabled)
+    save_config(config)
+
+
+def get_ui_scale():
+    try:
+        scale = float(load_config().get("ui_scale", DEFAULTS["ui_scale"]))
+    except (TypeError, ValueError):
+        return DEFAULTS["ui_scale"]
+    return min(max(scale, 0.7), 1.8)
+
+
+def set_ui_scale(scale):
+    config = load_config()
+    config["ui_scale"] = min(max(float(scale), 0.7), 1.8)
     save_config(config)

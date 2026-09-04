@@ -8,12 +8,20 @@
   ];
   const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
   const WEATHER_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+  const SLEEP_TIMEOUT_MS = 10 * 60 * 1000;
   const SWIPE_THRESHOLD_PX = 60;
   const GRID_WEEKS = 4; // the "month" grid is a rolling 4-week window, not a calendar month
   const TALL_FORECAST_VIEWS = new Set(["week", "week2", "list"]);
   // week3 has an extra calendar row to fit versus week2, so it gets a
   // mid-sized forecast strip instead of full-tall — more room for the grid.
   const MED_FORECAST_VIEWS = new Set(["week3"]);
+
+  // How much taller the forecast strip is than a single calendar row, for
+  // the grid views (week2/week3). Calibrated so it reproduces the old
+  // hand-picked 200px/150px look at a typical window size, but — unlike a
+  // fixed pixel value — it stays in proportion to the row height at any
+  // zoom level or screen size.
+  const FORECAST_ROW_HEIGHT_RATIO = 1.5;
 
   // Grid-style views (month + the multi-week views) all share the same
   // week-row rendering, just with a different row count.
@@ -42,6 +50,8 @@
     week3Btn: document.getElementById("week3Btn"),
     listBtn: document.getElementById("listBtn"),
     forecastStrip: document.getElementById("forecastStrip"),
+    app: document.getElementById("app"),
+    appHeader: document.getElementById("appHeader"),
     todayBtn: document.getElementById("todayBtn"),
     prevBtn: document.getElementById("prevBtn"),
     nextBtn: document.getElementById("nextBtn"),
@@ -56,6 +66,7 @@
     disconnectedScreen: document.getElementById("disconnectedScreen"),
     retryBtn: document.getElementById("retryBtn"),
     confettiCanvas: document.getElementById("confettiCanvas"),
+    sleepScreen: document.getElementById("sleepScreen"),
   };
 
   // ---------- Date helpers ----------
@@ -481,6 +492,25 @@
     el.forecastStrip.classList.toggle("forecast-strip-med", MED_FORECAST_VIEWS.has(state.view));
     // Re-render so the bar-chart scale (short vs. tall) matches the new view.
     if (shouldShow) renderForecast(lastForecast);
+    updateForecastHeight(VIEW_GRID_WEEKS[state.view]);
+  }
+
+  // For the grid views (week2/week3), sizes the forecast strip off the
+  // actual rendered row height instead of a fixed pixel value, so it stays
+  // proportional to the calendar rows at any zoom level or screen size (a
+  // fixed px height eats a growing share of the screen as zoom increases,
+  // since the calendar rows shrink with it but a fixed height doesn't).
+  function updateForecastHeight(numWeeks) {
+    const weekdaysEl = el.contentInner.querySelector(".month-weekdays");
+    if (!numWeeks || !weekdaysEl || el.forecastStrip.classList.contains("hidden")) {
+      el.forecastStrip.style.removeProperty("flex-basis");
+      return;
+    }
+    const available = el.app.clientHeight - el.appHeader.offsetHeight;
+    const weekdaysHeight = weekdaysEl.offsetHeight;
+    const forecastHeight =
+      (FORECAST_ROW_HEIGHT_RATIO * (available - weekdaysHeight)) / (numWeeks + FORECAST_ROW_HEIGHT_RATIO);
+    el.forecastStrip.style.flexBasis = `${forecastHeight}px`;
   }
 
   async function loadWeather() {
@@ -646,6 +676,7 @@
     }
 
     attachDayCellHandlers(byDay);
+    updateForecastHeight(numWeeks);
   }
 
   function sortDayEvents(dayEvents) {
@@ -1184,9 +1215,30 @@
     }, 200);
   });
 
+  // ---------- Sleep screen ----------
+  // A full-screen black overlay after SLEEP_TIMEOUT_MS of no touch, since
+  // getting real display power-management working through cage's Wayland
+  // session isn't reliable — this instead absorbs the waking touch itself
+  // (via its own pointer-events) so it doesn't also trigger whatever's
+  // underneath, and works regardless of the monitor/compositor.
+  let sleepTimer = null;
+
+  function armSleepTimer() {
+    clearTimeout(sleepTimer);
+    sleepTimer = setTimeout(() => {
+      el.sleepScreen.classList.add("active");
+    }, SLEEP_TIMEOUT_MS);
+  }
+
+  function wakeFromSleep() {
+    el.sleepScreen.classList.remove("active");
+  }
+
   // ---------- Touch ripple feedback ----------
 
   document.addEventListener("pointerdown", (e) => {
+    wakeFromSleep();
+    armSleepTimer();
     if (e.pointerType !== "touch") return;
     const ripple = document.createElement("div");
     ripple.className = "touch-ripple";
@@ -1216,4 +1268,5 @@
   render();
   loadEvents();
   loadWeather();
+  armSleepTimer();
 })();

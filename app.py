@@ -1,4 +1,5 @@
 import datetime as dt
+import platform
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
@@ -10,14 +11,20 @@ from config import (
     get_calendar_ids,
     get_points_tracking,
     get_task_list_id,
+    get_ui_scale,
     get_zip_code,
     set_calendar_ids,
     set_points_tracking,
     set_task_list_id,
+    set_ui_scale,
     set_zip_code,
 )
 
 app = Flask(__name__)
+
+# The kiosk runs cursor-free on the Pi (touchscreen), but a visible cursor is
+# convenient when running the app on a desktop OS for development.
+SHOW_CURSOR = platform.system() == "Windows"
 
 
 def _rfc3339(date_str, end_of_day=False):
@@ -31,7 +38,7 @@ def _rfc3339(date_str, end_of_day=False):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", ui_scale=get_ui_scale(), show_cursor=SHOW_CURSOR)
 
 
 def _settings_context(zip_code=None, zip_error=None):
@@ -57,6 +64,8 @@ def _settings_context(zip_code=None, zip_error=None):
         "task_error": task_error,
         "selected_task_list": get_task_list_id(),
         "points_tracking": get_points_tracking(),
+        "ui_scale": get_ui_scale(),
+        "show_cursor": SHOW_CURSOR,
     }
 
 
@@ -103,6 +112,16 @@ def settings_tasks():
 @app.route("/settings/points", methods=["POST"])
 def settings_points():
     set_points_tracking(bool(request.form.get("points_tracking")))
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/display", methods=["POST"])
+def settings_display():
+    try:
+        scale = float(request.form.get("ui_scale", 1.0))
+    except ValueError:
+        scale = 1.0
+    set_ui_scale(scale)
     return redirect(url_for("settings"))
 
 
