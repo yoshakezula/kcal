@@ -15,6 +15,29 @@
 
 * {
   box-sizing: border-box;
+  cursor: none;
+}
+
+.touch-ripple {
+  position: fixed;
+  width: 48px;
+  height: 48px;
+  margin-left: -24px;
+  margin-top: -24px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 9999;
+  transform: scale(0.3);
+  animation: touch-ripple-anim 400ms ease-out forwards;
+}
+
+@keyframes touch-ripple-anim {
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
 }
 
 html, body {

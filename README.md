@@ -237,7 +237,7 @@ labwc/Wayfire.
      while true; do
        cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars \
          --disable-session-crashed-bubble --check-for-update-interval=31536000 \
-         --no-memcheck --incognito http://127.0.0.1:5000
+         --no-memcheck --password-store=basic --incognito http://127.0.0.1:5000
        sleep 2
      done
    fi
@@ -258,8 +258,31 @@ labwc/Wayfire.
    ```
    grep -q consoleblank= /boot/firmware/cmdline.txt || sudo sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt
    ```
-7. Reboot. It should come up directly into the kiosk view with no desktop
+7. **Force the screen resolution**, if the display comes up at the wrong
+   one (e.g. a small touchscreen defaulting to a much higher resolution
+   than its native size, making everything look tiny/zoomed out). On
+   Raspberry Pi OS Bookworm this is set via a kernel command-line
+   parameter in `cmdline.txt`, not the old `config.txt` HDMI settings
+   (those have no effect under full KMS).
+
+   Find your connector name and its supported modes:
+   ```
+   for f in /sys/class/drm/card*-HDMI-A-*; do echo "$f:"; cat "$f/status"; cat "$f/modes"; echo; done
+   ```
+   Whichever one reports `connected` is your active port (usually
+   `HDMI-A-1`). Then force your panel's native resolution (adjust the
+   connector name and resolution to match):
+   ```
+   grep -q 'video=' /boot/firmware/cmdline.txt || sudo sed -i 's/$/ video=HDMI-A-1:1024x600@60D/' /boot/firmware/cmdline.txt
+   ```
+8. Reboot. It should come up directly into the kiosk view with no desktop
    loaded at all.
+
+The app's own stylesheet (`static/css/style.css`) sets `cursor: none` on
+every element, so no mouse pointer is drawn on a touchscreen setup — cage
+itself has no reliable built-in way to force-hide it (its maintainers have
+said as much upstream), so this is handled at the page level instead and
+needs no extra configuration on the Pi.
 
 ### Auto-deploy changes pushed from your dev machine
 
@@ -285,6 +308,28 @@ Pi picks up whatever you push without any manual step:
 
 Push to `main` from your dev machine as usual — within one interval, the Pi
 pulls the change and restarts the service.
+
+### Manually pulling an update and refreshing the kiosk view
+
+If you don't want to wait for the cron interval, or haven't set up
+`update.sh` at all, pull and apply a change by hand:
+
+1. **SSH into the Pi** and pull the latest commit:
+   ```
+   cd /home/username/src/kcal
+   git pull origin main
+   ```
+2. **Restart the Flask service** so it picks up any Python/backend changes:
+   ```
+   sudo systemctl restart kcal.service
+   ```
+3. **Refresh the browser view.** Restarting `kcal.service` alone doesn't
+   reload the page already open in Chromium — for that, restart the tty1
+   session, which relaunches cage + Chromium and loads the page fresh
+   (picking up any HTML/CSS/JS changes too, not just backend ones):
+   ```
+   sudo systemctl restart getty@tty1.service
+   ```
 
 ## 6. Access it from other devices on your network
 

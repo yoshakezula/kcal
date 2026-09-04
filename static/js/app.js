@@ -1180,6 +1180,18 @@
     }, 200);
   });
 
+  // ---------- Touch ripple feedback ----------
+
+  document.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return;
+    const ripple = document.createElement("div");
+    ripple.className = "touch-ripple";
+    ripple.style.left = `${e.clientX}px`;
+    ripple.style.top = `${e.clientY}px`;
+    ripple.addEventListener("animationend", () => ripple.remove());
+    document.body.appendChild(ripple);
+  });
+
   // ---------- Auto-refresh ----------
 
   refreshTimer = setInterval(() => {
