@@ -15,6 +15,7 @@ DEFAULTS = {
     "task_list_id": None,
     "points_tracking": False,
     "ui_scale": 1.0,
+    "sleep_enabled": False,
 }
 
 
@@ -84,4 +85,14 @@ def get_ui_scale():
 def set_ui_scale(scale):
     config = load_config()
     config["ui_scale"] = min(max(float(scale), 0.7), 1.8)
+    save_config(config)
+
+
+def get_sleep_enabled():
+    return bool(load_config().get("sleep_enabled", DEFAULTS["sleep_enabled"]))
+
+
+def set_sleep_enabled(enabled):
+    config = load_config()
+    config["sleep_enabled"] = bool(enabled)
     save_config(config)

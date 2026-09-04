@@ -1227,10 +1227,12 @@
   // session isn't reliable — this instead absorbs the waking touch itself
   // (via its own pointer-events) so it doesn't also trigger whatever's
   // underneath, and works regardless of the monitor/compositor.
+  const sleepEnabled = document.body.dataset.sleepEnabled === "true";
   let sleepTimer = null;
 
   function armSleepTimer() {
     clearTimeout(sleepTimer);
+    if (!sleepEnabled) return;
     sleepTimer = setTimeout(() => {
       el.sleepScreen.classList.add("active");
     }, SLEEP_TIMEOUT_MS);

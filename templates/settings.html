@@ -83,6 +83,21 @@
   </div>
 
   <div class="settings-card">
+    <h1>Sleep Screen</h1>
+    <p class="settings-hint">
+      After 10 minutes of no touch, dim the kiosk to a black screen until it's
+      tapped again.
+    </p>
+    <form method="post" action="{{ url_for('settings_sleep') }}" class="sleep-form">
+      <label class="calendar-option">
+        <input type="checkbox" name="sleep_enabled" {% if sleep_enabled %}checked{% endif %} />
+        <span class="calendar-name">Enable sleep screen</span>
+      </label>
+      <button type="submit" class="save-button">Save</button>
+    </form>
+  </div>
+
+  <div class="settings-card">
     <h1>Display Size</h1>
     <p class="settings-hint">Scale the whole kiosk view bigger or smaller — handy if the screen's native resolution makes things too small or too large.</p>
     <form method="post" action="{{ url_for('settings_display') }}" class="display-form">

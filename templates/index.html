@@ -9,7 +9,7 @@
   <style>html { zoom: {{ ui_scale }}; }</style>
   {% endif %}
 </head>
-<body class="{{ 'show-cursor' if show_cursor else '' }}">
+<body class="{{ 'show-cursor' if show_cursor else '' }}" data-sleep-enabled="{{ 'true' if sleep_enabled else 'false' }}">
   <div id="app">
     <header class="app-header" id="appHeader">
       <button class="icon-button" id="todayBtn" aria-label="Today">Today</button>

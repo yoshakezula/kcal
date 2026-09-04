@@ -10,11 +10,13 @@ from auth import NotAuthorized
 from config import (
     get_calendar_ids,
     get_points_tracking,
+    get_sleep_enabled,
     get_task_list_id,
     get_ui_scale,
     get_zip_code,
     set_calendar_ids,
     set_points_tracking,
+    set_sleep_enabled,
     set_task_list_id,
     set_ui_scale,
     set_zip_code,
@@ -38,7 +40,12 @@ def _rfc3339(date_str, end_of_day=False):
 
 @app.route("/")
 def index():
-    return render_template("index.html", ui_scale=get_ui_scale(), show_cursor=SHOW_CURSOR)
+    return render_template(
+        "index.html",
+        ui_scale=get_ui_scale(),
+        show_cursor=SHOW_CURSOR,
+        sleep_enabled=get_sleep_enabled(),
+    )
 
 
 def _settings_context(zip_code=None, zip_error=None):
@@ -66,6 +73,7 @@ def _settings_context(zip_code=None, zip_error=None):
         "points_tracking": get_points_tracking(),
         "ui_scale": get_ui_scale(),
         "show_cursor": SHOW_CURSOR,
+        "sleep_enabled": get_sleep_enabled(),
     }
 
 
@@ -112,6 +120,12 @@ def settings_tasks():
 @app.route("/settings/points", methods=["POST"])
 def settings_points():
     set_points_tracking(bool(request.form.get("points_tracking")))
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/sleep", methods=["POST"])
+def settings_sleep():
+    set_sleep_enabled(bool(request.form.get("sleep_enabled")))
     return redirect(url_for("settings"))
 
 
