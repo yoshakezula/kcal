@@ -163,20 +163,36 @@ and the `token.json` it produces into this project's folder on the Pi.
    ```ini
    [Unit]
    Description=Kcal calendar kiosk
-   After=network.target
+   After=network-online.target
+   Wants=network-online.target
 
    [Service]
    Type=simple
    User=username
    WorkingDirectory=/home/username/src/kcal
+   ExecStartPre=-/usr/bin/git -C /home/username/src/kcal pull origin main
    ExecStart=/usr/bin/python3 /home/username/src/kcal/app.py
    Restart=on-failure
 
    [Install]
    WantedBy=multi-user.target
    ```
+   The `ExecStartPre` line pulls the latest commit every time the service
+   starts — on boot, and on any manual/cron restart — so you don't have to
+   pull by hand. The leading `-` tells systemd to ignore a failed pull
+   (e.g. no network yet, or a merge conflict) rather than treat it as a
+   failure that blocks the app from starting at all; worst case it just
+   starts with whatever code was already on disk.
+
    Adjust `User`/`WorkingDirectory`/`ExecStart` to match wherever you put the
-   project and whichever Python/venv you're using. Then:
+   project and whichever Python/venv you're using — **if you installed
+   dependencies into a virtualenv** (e.g. via `python -m venv myenv` from
+   step 2 of setup), `ExecStart` needs to point at that venv's interpreter
+   (e.g. `/home/username/myenv/bin/python`), not `/usr/bin/python3` —
+   otherwise the service runs with the system Python, which won't have any
+   of the packages from `requirements.txt` installed, and will crash-loop
+   with `ModuleNotFoundError` until systemd gives up and marks it failed.
+   Then:
    ```
    sudo systemctl daemon-reload
    sudo systemctl enable --now kcal.service

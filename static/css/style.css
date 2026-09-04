@@ -189,6 +189,10 @@ button, a {
   flex-basis: 200px;
 }
 
+.forecast-strip.forecast-strip-med {
+  flex-basis: 150px;
+}
+
 .forecast-legend {
   flex: 0 0 auto;
   display: flex;

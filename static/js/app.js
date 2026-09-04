@@ -10,7 +10,10 @@
   const WEATHER_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
   const SWIPE_THRESHOLD_PX = 60;
   const GRID_WEEKS = 4; // the "month" grid is a rolling 4-week window, not a calendar month
-  const TALL_FORECAST_VIEWS = new Set(["week", "week2", "week3", "list"]);
+  const TALL_FORECAST_VIEWS = new Set(["week", "week2", "list"]);
+  // week3 has an extra calendar row to fit versus week2, so it gets a
+  // mid-sized forecast strip instead of full-tall — more room for the grid.
+  const MED_FORECAST_VIEWS = new Set(["week3"]);
 
   // Grid-style views (month + the multi-week views) all share the same
   // week-row rendering, just with a different row count.
@@ -475,6 +478,7 @@
     const shouldShow = state.view !== "month" && lastForecast && lastForecast.length > 0;
     el.forecastStrip.classList.toggle("hidden", !shouldShow);
     el.forecastStrip.classList.toggle("forecast-strip-tall", TALL_FORECAST_VIEWS.has(state.view));
+    el.forecastStrip.classList.toggle("forecast-strip-med", MED_FORECAST_VIEWS.has(state.view));
     // Re-render so the bar-chart scale (short vs. tall) matches the new view.
     if (shouldShow) renderForecast(lastForecast);
   }
@@ -585,7 +589,7 @@
     return `
       <div class="month-grid" style="grid-template-rows:auto repeat(${numWeeks},1fr)">
         <div class="month-weekdays">${weekdaysHtml}</div>
-        <div class="month-rows" style="grid-template-rows:repeat(${numWeeks},1fr)">${rowsHtml}</div>
+        <div class="month-rows" style="grid-template-rows:repeat(${numWeeks},1fr);grid-row:2 / span ${numWeeks}">${rowsHtml}</div>
       </div>`;
   }
 
