@@ -13,6 +13,7 @@ DEFAULTS = {
     "calendar_ids": ["primary"],
     "zip_code": "90008",
     "task_list_id": None,
+    "points_tracking": False,
 }
 
 
@@ -58,4 +59,14 @@ def get_task_list_id():
 def set_task_list_id(task_list_id):
     config = load_config()
     config["task_list_id"] = task_list_id
+    save_config(config)
+
+
+def get_points_tracking():
+    return bool(load_config().get("points_tracking", DEFAULTS["points_tracking"]))
+
+
+def set_points_tracking(enabled):
+    config = load_config()
+    config["points_tracking"] = bool(enabled)
     save_config(config)

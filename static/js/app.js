@@ -829,6 +829,8 @@
     taskLists: [],
     selectedListId: null,
     tasks: [],
+    pointsEnabled: false,
+    totalPoints: 0,
   };
 
   function escapeAttr(str) {
@@ -850,13 +852,19 @@
         <div class="task-row ${t.completed ? "task-completed" : ""}" data-task-id="${escapeAttr(t.id)}">
           <button class="task-check ${t.completed ? "checked" : ""}" aria-label="${t.completed ? "Mark incomplete" : "Mark complete"}"></button>
           <div class="task-title">${escapeHtml(t.title)}</div>
+          ${taskState.pointsEnabled && t.points ? `<div class="task-points">+${t.points}</div>` : ""}
         </div>`
           )
           .join("")
       : `<p class="task-empty">No tasks in this list.</p>`;
 
+    const totalPointsHtml = taskState.pointsEnabled
+      ? `<div class="task-points-total">Total Points: ${taskState.totalPoints || 0}</div>`
+      : "";
+
     return `
       <h2>Tasks</h2>
+      ${totalPointsHtml}
       <select class="task-list-select" id="taskListSelect">${optionsHtml}</select>
       <div class="task-list" id="taskListBody">${rowsHtml}</div>`;
   }
@@ -899,14 +907,21 @@
   async function loadTasksForSelectedList() {
     if (!taskState.selectedListId) {
       taskState.tasks = [];
+      taskState.pointsEnabled = false;
+      taskState.totalPoints = 0;
       renderTasksOverlay();
       return;
     }
     try {
       const response = await fetch(`/api/tasks?tasklist=${encodeURIComponent(taskState.selectedListId)}`);
-      taskState.tasks = response.ok ? (await response.json()).tasks || [] : [];
+      const data = response.ok ? await response.json() : {};
+      taskState.tasks = data.tasks || [];
+      taskState.pointsEnabled = !!data.pointsEnabled;
+      taskState.totalPoints = data.totalPoints || 0;
     } catch (err) {
       taskState.tasks = [];
+      taskState.pointsEnabled = false;
+      taskState.totalPoints = 0;
     }
     renderTasksOverlay();
   }
@@ -929,7 +944,10 @@
     const task = taskState.tasks.find((t) => t.id === taskId);
     if (!task) return;
     const newCompleted = !task.completed;
+    const pointsDelta = taskState.pointsEnabled && task.points ? (newCompleted ? task.points : -task.points) : 0;
+
     task.completed = newCompleted; // optimistic
+    if (pointsDelta) taskState.totalPoints = (taskState.totalPoints || 0) + pointsDelta;
     renderTasksOverlay();
     if (newCompleted) fireConfetti();
 
@@ -940,8 +958,14 @@
         body: JSON.stringify({ tasklist: taskState.selectedListId, task: taskId, completed: newCompleted }),
       });
       if (!response.ok) throw new Error("toggle failed");
+      const data = await response.json();
+      if (typeof data.totalPoints === "number") {
+        taskState.totalPoints = data.totalPoints;
+        renderTasksOverlay();
+      }
     } catch (err) {
       task.completed = !newCompleted; // revert on failure
+      if (pointsDelta) taskState.totalPoints = (taskState.totalPoints || 0) - pointsDelta;
       renderTasksOverlay();
     }
   }

@@ -68,6 +68,21 @@
   </div>
 
   <div class="settings-card">
+    <h1>Points Tracking</h1>
+    <p class="settings-hint">
+      Parse point values like "5 pts" out of task names and keep a running
+      total as you check tasks off.
+    </p>
+    <form method="post" action="{{ url_for('settings_points') }}" class="points-form">
+      <label class="calendar-option">
+        <input type="checkbox" name="points_tracking" {% if points_tracking %}checked{% endif %} />
+        <span class="calendar-name">Enable points tracking</span>
+      </label>
+      <button type="submit" class="save-button">Save</button>
+    </form>
+  </div>
+
+  <div class="settings-card">
     <h1>Weather Location</h1>
     <p class="settings-hint">Zip code to show a 7-day forecast at the top of the kiosk view.</p>
     {% if zip_error %}

@@ -8,9 +8,11 @@ import weather
 from auth import NotAuthorized
 from config import (
     get_calendar_ids,
+    get_points_tracking,
     get_task_list_id,
     get_zip_code,
     set_calendar_ids,
+    set_points_tracking,
     set_task_list_id,
     set_zip_code,
 )
@@ -54,6 +56,7 @@ def _settings_context(zip_code=None, zip_error=None):
         "task_lists": task_lists,
         "task_error": task_error,
         "selected_task_list": get_task_list_id(),
+        "points_tracking": get_points_tracking(),
     }
 
 
@@ -94,6 +97,12 @@ def settings_location():
 def settings_tasks():
     task_list_id = request.form.get("task_list_id") or None
     set_task_list_id(task_list_id)
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/points", methods=["POST"])
+def settings_points():
+    set_points_tracking(bool(request.form.get("points_tracking")))
     return redirect(url_for("settings"))
 
 
@@ -159,15 +168,17 @@ def api_tasklists():
 @app.route("/api/tasks")
 def api_tasks():
     task_list_id = request.args.get("tasklist") or get_task_list_id() or "@default"
+    points_enabled = get_points_tracking()
 
     try:
-        tasks = gtasks.get_tasks(task_list_id)
+        tasks = gtasks.get_tasks(task_list_id, points_enabled=points_enabled)
+        total_points = gtasks.get_total_points(task_list_id) if points_enabled else None
     except NotAuthorized as e:
         return jsonify({"error": "not_authorized", "message": str(e)}), 401
     except Exception as e:
         return jsonify({"error": "unknown", "message": str(e)}), 500
 
-    return jsonify({"tasks": tasks})
+    return jsonify({"tasks": tasks, "pointsEnabled": points_enabled, "totalPoints": total_points})
 
 
 @app.route("/api/tasks/toggle", methods=["POST"])
@@ -180,14 +191,16 @@ def api_tasks_toggle():
     if not task_list_id or not task_id:
         return jsonify({"error": "bad_request", "message": "tasklist and task are required"}), 400
 
+    points_enabled = get_points_tracking()
+
     try:
-        task = gtasks.set_task_completed(task_list_id, task_id, completed)
+        task, total_points = gtasks.set_task_completed(task_list_id, task_id, completed, points_enabled=points_enabled)
     except NotAuthorized as e:
         return jsonify({"error": "not_authorized", "message": str(e)}), 401
     except Exception as e:
         return jsonify({"error": "unknown", "message": str(e)}), 500
 
-    return jsonify({"task": task})
+    return jsonify({"task": task, "totalPoints": total_points})
 
 
 if __name__ == "__main__":

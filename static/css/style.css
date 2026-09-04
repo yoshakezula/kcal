@@ -776,6 +776,21 @@ button, a {
   padding: 8px 4px;
 }
 
+.task-points {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.task-points-total {
+  font-size: 16px;
+  font-weight: 600;
+  text-align: right;
+  margin: 4px 0 -4px;
+}
+
 /* ---------- Hourly forecast (opened from a forecast-strip day) ---------- */
 
 .hourly-legend {
