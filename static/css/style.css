@@ -10,6 +10,7 @@
   --forecast-h: 76px;
   --temp-color: #eb6834;
   --humidity-color: #2a78d6;
+  --precip-color: #1a9e8f;
 }
 
 * {
@@ -893,6 +894,8 @@ button, a {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  padding: 2px 0;
+  border-radius: 3px;
 }
 
 .hourly-empty {

@@ -293,6 +293,8 @@
   const HOURLY_PAD_BOTTOM = 8;
   const HOURLY_PAD_LEFT_PCT = ((HOURLY_PAD_LEFT / HOURLY_CHART_W) * 100).toFixed(2);
   const HOURLY_PAD_RIGHT_PCT = ((HOURLY_PAD_RIGHT / HOURLY_CHART_W) * 100).toFixed(2);
+  const HUMIDITY_SHADE_RGB = "42,120,214"; // matches --humidity-color
+  const PRECIP_SHADE_RGB = "26,158,143"; // matches --precip-color
 
   // Two series, two scales: temperature reads off the left axis, humidity
   // (always 0-100%) off the right - each drawn in its own color so the
@@ -375,11 +377,27 @@
       </svg>`;
   }
 
-  function buildHourlyAxisRow(hours, formatCell) {
+  function buildHourlyAxisRow(hours, formatCell, shadeCell) {
     return `
       <div class="hourly-axis-row" style="padding-left:${HOURLY_PAD_LEFT_PCT}%;padding-right:${HOURLY_PAD_RIGHT_PCT}%">
-        ${hours.map((h) => `<div>${formatCell(h)}</div>`).join("")}
+        ${hours
+          .map((h) => {
+            const bg = shadeCell ? shadeCell(h) : null;
+            const style = bg ? ` style="background:${bg}"` : "";
+            return `<div${style}>${formatCell(h)}</div>`;
+          })
+          .join("")}
       </div>`;
+  }
+
+  // Shades a cell by how far its value sits on a fixed 0-100 scale, not by
+  // where it falls within this day's own min/max - so a 40% reading looks
+  // the same shade on a calm day as it does on a volatile one.
+  function absoluteScaleShade(value, rgb) {
+    if (value == null) return null;
+    const t = Math.max(0, Math.min(100, value)) / 100;
+    const alpha = 0.08 + t * 0.5;
+    return `rgba(${rgb},${alpha.toFixed(2)})`;
   }
 
   function buildHourlyForecastHtml(date, hours) {
@@ -405,10 +423,18 @@
         ${buildHourlyAxisRow(hours, (h) => formatHourLabel(h.time))}
 
         <div class="hourly-row-label">Humidity</div>
-        ${buildHourlyAxisRow(hours, (h) => (h.humidity != null ? h.humidity + "%" : "–"))}
+        ${buildHourlyAxisRow(
+          hours,
+          (h) => (h.humidity != null ? h.humidity + "%" : "–"),
+          (h) => absoluteScaleShade(h.humidity, HUMIDITY_SHADE_RGB)
+        )}
 
         <div class="hourly-row-label">Rain</div>
-        ${buildHourlyAxisRow(hours, (h) => (h.precipProbability != null ? h.precipProbability + "%" : "–"))}
+        ${buildHourlyAxisRow(
+          hours,
+          (h) => (h.precipProbability != null ? h.precipProbability + "%" : "–"),
+          (h) => absoluteScaleShade(h.precipProbability, PRECIP_SHADE_RGB)
+        )}
       </div>`;
   }
 
