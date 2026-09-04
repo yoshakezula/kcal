@@ -177,6 +177,7 @@ button, a {
 
 .forecast-strip {
   flex: 0 0 var(--forecast-h);
+  min-height: 0;
   display: flex;
   align-items: stretch;
   gap: 10px;

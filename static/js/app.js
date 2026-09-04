@@ -27,6 +27,11 @@
   // week-row rendering, just with a different row count.
   const VIEW_GRID_WEEKS = { month: GRID_WEEKS, week2: 2, week3: 3 };
 
+  // The forecast strip's height is calibrated off week3's row count for
+  // both week2 and week3, so the pane is the same height in either view
+  // instead of growing taller on week2 just because it has fewer rows.
+  const FORECAST_HEIGHT_WEEKS = { month: GRID_WEEKS, week2: VIEW_GRID_WEEKS.week3, week3: VIEW_GRID_WEEKS.week3 };
+
   // How many event chips fit in a day cell is measured from the actual
   // rendered DOM (see computeMonthChipCapacity) rather than guessed, so it
   // adapts to any screen size/resolution and to entering/exiting fullscreen.
@@ -492,14 +497,15 @@
     el.forecastStrip.classList.toggle("forecast-strip-med", MED_FORECAST_VIEWS.has(state.view));
     // Re-render so the bar-chart scale (short vs. tall) matches the new view.
     if (shouldShow) renderForecast(lastForecast);
-    updateForecastHeight(VIEW_GRID_WEEKS[state.view]);
+    updateForecastHeight(FORECAST_HEIGHT_WEEKS[state.view]);
   }
 
-  // For the grid views (week2/week3), sizes the forecast strip off the
-  // actual rendered row height instead of a fixed pixel value, so it stays
-  // proportional to the calendar rows at any zoom level or screen size (a
-  // fixed px height eats a growing share of the screen as zoom increases,
-  // since the calendar rows shrink with it but a fixed height doesn't).
+  // For the grid views (week2/week3), sizes the forecast strip as a ratio
+  // of what a calendar row would be at `numWeeks` rows, so it stays in
+  // proportion at any zoom level or screen size instead of eating a growing
+  // share of the screen as zoom increases (what a fixed px height would do).
+  // `numWeeks` is the weeks basis used for that calculation, not necessarily
+  // the number of rows actually being drawn — see FORECAST_HEIGHT_WEEKS.
   function updateForecastHeight(numWeeks) {
     const weekdaysEl = el.contentInner.querySelector(".month-weekdays");
     if (!numWeeks || !weekdaysEl || el.forecastStrip.classList.contains("hidden")) {
@@ -676,7 +682,7 @@
     }
 
     attachDayCellHandlers(byDay);
-    updateForecastHeight(numWeeks);
+    updateForecastHeight(FORECAST_HEIGHT_WEEKS[state.view]);
   }
 
   function sortDayEvents(dayEvents) {
