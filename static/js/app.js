@@ -52,6 +52,7 @@
     overlayBody: document.getElementById("overlayBody"),
     disconnectedScreen: document.getElementById("disconnectedScreen"),
     retryBtn: document.getElementById("retryBtn"),
+    confettiCanvas: document.getElementById("confettiCanvas"),
   };
 
   // ---------- Date helpers ----------
@@ -759,6 +760,67 @@
   el.overlayBackdrop.addEventListener("click", closeOverlay);
   el.overlayClose.addEventListener("click", closeOverlay);
 
+  // ---------- Confetti ----------
+
+  const CONFETTI_COLORS = ["#f94144", "#f3722c", "#f8961e", "#f9c74f", "#90be6d", "#43aa8b", "#577590", "#c8b6ff"];
+  const CONFETTI_DURATION_MS = 4000;
+  let confettiRafId = null;
+
+  function fireConfetti() {
+    const canvas = el.confettiCanvas;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    canvas.classList.remove("hidden");
+
+    const particleCount = 160;
+    const particles = [];
+    for (let i = 0; i < particleCount; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: -20 - Math.random() * canvas.height * 0.5,
+        size: 6 + Math.random() * 6,
+        color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+        vx: -2 + Math.random() * 4,
+        vy: 2 + Math.random() * 3,
+        rotation: Math.random() * 360,
+        rotationSpeed: -8 + Math.random() * 16,
+      });
+    }
+
+    const startTime = performance.now();
+    if (confettiRafId !== null) cancelAnimationFrame(confettiRafId);
+
+    function step(now) {
+      const elapsed = now - startTime;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rotation += p.rotationSpeed;
+
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rotation * Math.PI) / 180);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+        ctx.restore();
+      });
+
+      if (elapsed < CONFETTI_DURATION_MS) {
+        confettiRafId = requestAnimationFrame(step);
+      } else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.classList.add("hidden");
+        confettiRafId = null;
+      }
+    }
+
+    confettiRafId = requestAnimationFrame(step);
+  }
+
   // ---------- Tasks ----------
 
   // Task lists are fetched once and cached; the selected list and its tasks
@@ -869,6 +931,7 @@
     const newCompleted = !task.completed;
     task.completed = newCompleted; // optimistic
     renderTasksOverlay();
+    if (newCompleted) fireConfetti();
 
     try {
       const response = await fetch("/api/tasks/toggle", {

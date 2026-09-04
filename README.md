@@ -205,6 +205,62 @@ and the `token.json` it produces into this project's folder on the Pi.
    ```
 5. Reboot. It should come up directly into the kiosk view.
 
+### Raspberry Pi OS Lite (no desktop) — cage kiosk
+
+For lower-power boards like the Pi Zero 2 W, skip the desktop image entirely
+and use **cage** — a minimal Wayland compositor that just runs one
+fullscreen app, with no desktop/panel/window-manager overhead — instead of
+labwc/Wayfire.
+
+1. **Flash Raspberry Pi OS Lite** (64-bit) instead of the desktop image.
+2. **Enable console autologin** so it boots straight to a logged-in shell on
+   tty1:
+   ```
+   sudo raspi-config nonint do_boot_behaviour B2
+   ```
+3. **Install cage and Chromium**:
+   ```
+   sudo apt update
+   sudo apt install --no-install-recommends -y cage chromium-browser
+   ```
+   (`--no-install-recommends` skips each package's optional extras — smaller
+   install, faster on a Zero 2 W's SD card.)
+4. **Run the Flask app as a systemd service** — same `kcal.service` as
+   above.
+5. **Launch cage + Chromium on login** by appending this to
+   `~/.bash_profile` (the `>>` redirect creates the file if it doesn't
+   already exist — run this as the autologin user, not root):
+   ```sh
+   cat << 'EOF' >> ~/.bash_profile
+   if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+     until curl -s http://127.0.0.1:5000 > /dev/null; do sleep 1; done
+     while true; do
+       cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars \
+         --disable-session-crashed-bubble --check-for-update-interval=31536000 \
+         --no-memcheck --incognito http://127.0.0.1:5000
+       sleep 2
+     done
+   fi
+   EOF
+   ```
+   `.bash_profile` is only read for login shells, which is exactly what the
+   tty1 autologin creates — but note it means `~/.bashrc` won't get sourced
+   the way it would in a normal interactive shell (doesn't matter for this
+   kiosk use case).
+
+   cage grabs the display directly via DRM/KMS as soon as this runs on the
+   tty1 autologin shell, so there's no desktop session to load first. The
+   `while true` loop relaunches Chromium/cage automatically if it ever
+   crashes.
+6. **Disable console blanking** (framebuffer blanking still applies before
+   cage takes the display) by appending `consoleblank=0` to the single line
+   in `/boot/firmware/cmdline.txt`:
+   ```
+   grep -q consoleblank= /boot/firmware/cmdline.txt || sudo sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt
+   ```
+7. Reboot. It should come up directly into the kiosk view with no desktop
+   loaded at all.
+
 ### Auto-deploy changes pushed from your dev machine
 
 `update.sh` (in this repo) checks GitHub for new commits and, if there are

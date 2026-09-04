@@ -925,6 +925,19 @@ button, a {
   cursor: pointer;
 }
 
+/* ---------- Confetti ---------- */
+
+.confetti-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.confetti-canvas.hidden {
+  display: none;
+}
+
 /* ---------- Settings page ---------- */
 
 body.settings-page {
