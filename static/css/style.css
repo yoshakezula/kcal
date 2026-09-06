@@ -546,10 +546,6 @@ body.compact-header .view-toggle-btn {
   flex-basis: 12.5rem;
 }
 
-.forecast-strip.forecast-strip-med {
-  flex-basis: 9.375rem;
-}
-
 .forecast-legend {
   flex: 0 0 auto;
   display: flex;

@@ -17,14 +17,14 @@
   // so the threshold tracks the ui_scale setting.
   const HEADER_WIDE_REM = 62;
   const GRID_WEEKS = 4; // the "month" grid is a rolling 4-week window, not a calendar month
-  const TALL_FORECAST_VIEWS = new Set(["week", "week2", "list"]);
-  // week3 has an extra calendar row to fit versus week2, so it gets a
-  // mid-sized forecast strip instead of full-tall — more room for the grid.
-  const MED_FORECAST_VIEWS = new Set(["week3"]);
+  // Views whose forecast strip is a fixed height rather than sized off the
+  // calendar rows. week3 has an extra row to fit versus week2, so it keeps
+  // the fixed strip instead of the taller row-proportional one.
+  const TALL_FORECAST_VIEWS = new Set(["week3", "list"]);
 
   // How much taller the forecast strip is than a single calendar row, for
-  // the grid views (week2/week3). Calibrated so it reproduces the old
-  // hand-picked 200px/150px look at a typical window size, but — unlike a
+  // the row-proportional views (week/week2). Calibrated so it reproduces the
+  // old hand-picked 200px look at a typical window size, but — unlike a
   // fixed pixel value — it stays in proportion to the row height at any
   // zoom level or screen size.
   const FORECAST_ROW_HEIGHT_RATIO = 1.5;
@@ -34,9 +34,10 @@
   const VIEW_GRID_WEEKS = { month: GRID_WEEKS, week2: 2, week3: 3 };
 
   // The forecast strip's height is calibrated off week3's row count for
-  // both week2 and week3, so the pane is the same height in either view
+  // both week and week2, so the pane is the same height in either view
   // instead of growing taller on week2 just because it has fewer rows.
-  const FORECAST_HEIGHT_WEEKS = { month: GRID_WEEKS, week2: VIEW_GRID_WEEKS.week3, week3: VIEW_GRID_WEEKS.week3 };
+  // Views missing from this map fall back to their CSS height.
+  const FORECAST_HEIGHT_WEEKS = { month: GRID_WEEKS, week: VIEW_GRID_WEEKS.week3, week2: VIEW_GRID_WEEKS.week3 };
 
   // How many event chips fit in a day cell is measured from the actual
   // rendered DOM (see computeMonthChipCapacity) rather than guessed, so it
@@ -600,26 +601,27 @@
     const shouldShow = state.view !== "month" && lastForecast && lastForecast.length > 0;
     el.forecastStrip.classList.toggle("hidden", !shouldShow);
     el.forecastStrip.classList.toggle("forecast-strip-tall", TALL_FORECAST_VIEWS.has(state.view));
-    el.forecastStrip.classList.toggle("forecast-strip-med", MED_FORECAST_VIEWS.has(state.view));
     // Re-render so the bar-chart scale (short vs. tall) matches the new view.
     if (shouldShow) renderForecast(lastForecast);
     updateForecastHeight(FORECAST_HEIGHT_WEEKS[state.view]);
   }
 
-  // For the grid views (week2/week3), sizes the forecast strip as a ratio
-  // of what a calendar row would be at `numWeeks` rows, so it stays in
-  // proportion at any zoom level or screen size instead of eating a growing
-  // share of the screen as zoom increases (what a fixed px height would do).
-  // `numWeeks` is the weeks basis used for that calculation, not necessarily
-  // the number of rows actually being drawn — see FORECAST_HEIGHT_WEEKS.
+  // For the row-proportional views (week/week2), sizes the forecast strip as
+  // a ratio of what a calendar row would be at `numWeeks` rows, so it stays
+  // in proportion at any zoom level or screen size instead of eating a
+  // growing share of the screen as zoom increases (what a fixed px height
+  // would do). `numWeeks` is the weeks basis used for that calculation, not
+  // necessarily the number of rows actually being drawn — see
+  // FORECAST_HEIGHT_WEEKS.
   function updateForecastHeight(numWeeks) {
-    const weekdaysEl = el.contentInner.querySelector(".month-weekdays");
-    if (!numWeeks || !weekdaysEl || el.forecastStrip.classList.contains("hidden")) {
+    if (!numWeeks || el.forecastStrip.classList.contains("hidden")) {
       el.forecastStrip.style.removeProperty("flex-basis");
       return;
     }
     const available = el.app.clientHeight - el.appHeader.offsetHeight;
-    const weekdaysHeight = weekdaysEl.offsetHeight;
+    // The week-columns view has no shared weekday header row to reserve.
+    const weekdaysEl = el.contentInner.querySelector(".month-weekdays");
+    const weekdaysHeight = weekdaysEl ? weekdaysEl.offsetHeight : 0;
     const forecastHeight =
       (FORECAST_ROW_HEIGHT_RATIO * (available - weekdaysHeight)) / (numWeeks + FORECAST_ROW_HEIGHT_RATIO);
     el.forecastStrip.style.flexBasis = `${forecastHeight}px`;
@@ -656,6 +658,7 @@
     } else {
       renderList();
     }
+    updateForecastHeight(FORECAST_HEIGHT_WEEKS[state.view]);
   }
 
   function formatDateRangeLabel(start, end) {
@@ -791,7 +794,6 @@
     }
 
     attachDayCellHandlers(byDay);
-    updateForecastHeight(FORECAST_HEIGHT_WEEKS[state.view]);
   }
 
   function sortDayEvents(dayEvents) {
@@ -1365,7 +1367,7 @@
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       updateHeaderDensity();
-      if (VIEW_GRID_WEEKS[state.view]) render();
+      if (VIEW_GRID_WEEKS[state.view] || FORECAST_HEIGHT_WEEKS[state.view]) render();
     }, 200);
   });
 
