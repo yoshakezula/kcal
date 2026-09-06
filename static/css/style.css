@@ -533,7 +533,7 @@ body.compact-header .view-toggle-btn {
   display: flex;
   align-items: stretch;
   gap: 0.625rem;
-  padding: 0.375rem 0.875rem;
+  padding: 0.125rem 0.875rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
@@ -605,6 +605,11 @@ body.compact-header .view-toggle-btn {
   min-height: 0;
   cursor: pointer;
   border-radius: var(--r-md);
+  /* Inset the content so the today/hover tint has room to breathe above
+     the day label and below the low values, instead of stopping flush
+     against the text. The bar tracks flex, so this comes out of their
+     height rather than the strip's. */
+  padding: 0.5rem 0.25rem;
   transition: background-color var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
 }
