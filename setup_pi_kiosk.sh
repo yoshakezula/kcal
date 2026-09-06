@@ -55,6 +55,9 @@ echo "==> Using user '$USERNAME' (home: $USER_HOME), repo at $REPO_DIR"
 
 echo "==> Installing cage, Chromium, and a color emoji font"
 apt update
+# The UI font (Inter) is served by the app itself from static/fonts, so
+# there's no font package to install here beyond the emoji face the
+# weather icons need.
 apt install --no-install-recommends -y cage chromium-browser fonts-noto-color-emoji
 fc-cache -f
 

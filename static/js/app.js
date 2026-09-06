@@ -10,6 +10,12 @@
   const WEATHER_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
   const SLEEP_TIMEOUT_MS = 10 * 60 * 1000;
   const SWIPE_THRESHOLD_PX = 60;
+  const LOADING_DELAY_MS = 200;  // don't flash the progress bar on fast fetches
+  const LOADING_MIN_MS = 400;    // ...but once it's up, leave it up long enough to read
+  // Full view labels ("Month") need roughly this much header width; below
+  // it they swap to the short forms ("M"). Measured in rem rather than px
+  // so the threshold tracks the ui_scale setting.
+  const HEADER_WIDE_REM = 62;
   const GRID_WEEKS = 4; // the "month" grid is a rolling 4-week window, not a calendar month
   const TALL_FORECAST_VIEWS = new Set(["week", "week2", "list"]);
   // week3 has an extra calendar row to fit versus week2, so it gets a
@@ -38,6 +44,10 @@
   // This is just the seed used before anything has been measured yet.
   let monthChipCapacity = 3;
 
+  let loadingDelayTimer = null;
+  let loadingHideTimer = null;
+  let loadingShownAt = 0;
+
   const state = {
     // "month" | "week" | "week2" | "week3" | "list". The last-used view is
     // persisted server-side (config.json) and handed in on the body, so a
@@ -50,7 +60,7 @@
   const el = {
     content: document.getElementById("content"),
     contentInner: document.getElementById("contentInner"),
-    loadingOverlay: document.getElementById("loadingOverlay"),
+    progressBar: document.getElementById("progressBar"),
     rangeLabel: document.getElementById("rangeLabel"),
     monthBtn: document.getElementById("monthBtn"),
     weekBtn: document.getElementById("weekBtn"),
@@ -65,6 +75,8 @@
     nextBtn: document.getElementById("nextBtn"),
     refreshBtn: document.getElementById("refreshBtn"),
     fullscreenBtn: document.getElementById("fullscreenBtn"),
+    moreBtn: document.getElementById("moreBtn"),
+    morePopup: document.getElementById("morePopup"),
     tasksBtn: document.getElementById("tasksBtn"),
     overlay: document.getElementById("overlay"),
     overlayPanel: document.querySelector(".overlay-panel"),
@@ -231,8 +243,29 @@
     }
   }
 
+  // A refresh shows a thin indeterminate bar on the header's bottom edge
+  // rather than a full-screen scrim, so the already-rendered calendar
+  // stays readable while the fetch is in flight. It only appears if the
+  // fetch is actually slow (most finish well inside LOADING_DELAY_MS),
+  // and once shown it stays up long enough to read instead of blinking.
   function showLoading(show) {
-    el.loadingOverlay.classList.toggle("hidden", !show);
+    clearTimeout(loadingDelayTimer);
+    clearTimeout(loadingHideTimer);
+
+    if (show) {
+      loadingDelayTimer = setTimeout(() => {
+        loadingShownAt = Date.now();
+        el.progressBar.classList.add("active");
+      }, LOADING_DELAY_MS);
+      return;
+    }
+
+    if (!el.progressBar.classList.contains("active")) return;
+    const remaining = LOADING_MIN_MS - (Date.now() - loadingShownAt);
+    loadingHideTimer = setTimeout(
+      () => el.progressBar.classList.remove("active"),
+      Math.max(0, remaining)
+    );
   }
 
   function showDisconnected(show) {
@@ -681,7 +714,10 @@
             const timeHtml = evt.allDay
               ? ""
               : `<span class="event-chip-time">${formatShortTime(parseEventBoundary(evt.start, false))}</span>`;
-            return `<div class="event-chip" style="background-color:${evt.color}"><span class="event-chip-title">${escapeHtml(evt.title)}</span>${timeHtml}</div>`;
+            // --chip drives both the rail and the tinted fill (see .event-chip):
+            // painting the raw color as a background under white text was
+            // unreadable for the light entries in Google's palette.
+            return `<div class="event-chip" style="--chip:${evt.color}"><span class="event-chip-title">${escapeHtml(evt.title)}</span>${timeHtml}</div>`;
           })
           .join("");
         const moreHtml = extra > 0 ? `<div class="day-more">+${extra} more</div>` : "";
@@ -785,7 +821,7 @@
           <div class="week-col-event" data-event-id="${evt.id}" data-date-key="${key}">
             <div class="week-col-event-title">
               <span class="week-col-event-dot" style="background-color:${evt.color}"></span>
-              ${escapeHtml(evt.title)}
+              <span class="week-col-event-name">${escapeHtml(evt.title)}</span>
             </div>
             <div class="week-col-event-time">${eventTimeLabel(evt)}</div>
           </div>`
@@ -794,12 +830,12 @@
         : `<div class="week-col-empty">No events</div>`;
 
       colsHtml += `
-        <div class="week-col">
+        <div class="week-col ${isToday ? "today" : ""}">
           <div class="week-col-header ${isToday ? "today" : ""}">
             <span class="day-name">${WEEKDAY_NAMES[day.getDay()]}</span>
             <span class="day-date">${MONTH_NAMES[day.getMonth()].slice(0, 3)} ${day.getDate()}</span>
           </div>
-          <div class="week-col-events">${eventsHtml}</div>
+          <div class="week-col-events scroll-y">${eventsHtml}</div>
         </div>`;
     }
 
@@ -889,7 +925,7 @@
 
   function renderList() {
     const weekStart = startOfWeek(state.anchor);
-    el.contentInner.innerHTML = `<div class="week-list"></div>`;
+    el.contentInner.innerHTML = `<div class="week-list scroll-y"></div>`;
     const listEl = el.contentInner.querySelector(".week-list");
 
     listEl.addEventListener("click", (e) => {
@@ -1280,9 +1316,36 @@
     });
   })();
 
+  // ---------- Header overflow menu ----------
+
+  function closeMoreMenu() {
+    el.morePopup.classList.add("hidden");
+    el.moreBtn.setAttribute("aria-expanded", "false");
+  }
+
+  el.moreBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const nowHidden = el.morePopup.classList.toggle("hidden");
+    el.moreBtn.setAttribute("aria-expanded", nowHidden ? "false" : "true");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (el.morePopup.classList.contains("hidden")) return;
+    if (!e.target.closest(".header-menu")) closeMoreMenu();
+  });
+
+  // Swaps the view-toggle between full labels ("Month") and short ones
+  // ("M") based on how much room the header actually has. Driven from JS
+  // because a px-based media query would ignore the ui_scale setting.
+  function updateHeaderDensity() {
+    const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    document.body.classList.toggle("compact-header", window.innerWidth < HEADER_WIDE_REM * rootPx);
+  }
+
   // ---------- Fullscreen ----------
 
   el.fullscreenBtn.addEventListener("click", () => {
+    closeMoreMenu();
     if (document.fullscreenElement) {
       document.exitFullscreen();
     } else {
@@ -1301,6 +1364,7 @@
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      updateHeaderDensity();
       if (VIEW_GRID_WEEKS[state.view]) render();
     }, 200);
   });
@@ -1332,16 +1396,12 @@
     wakeFromSleep();
     armSleepTimer();
     if (e.pointerType !== "touch") return;
-    // Chromium reports touch clientX/Y in unzoomed physical pixels, but
-    // `html { zoom }` (used for the ui_scale setting) positions fixed
-    // elements in the zoomed layout space — mouse coordinates get corrected
-    // for zoom automatically, touch coordinates don't. Undo that here or
-    // the ripple lands off from the actual touch point whenever ui_scale != 1.
-    const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    // ui_scale is applied as a root font-size rather than `html { zoom }`,
+    // so clientX/Y and CSS pixels are the same space — no correction needed.
     const ripple = document.createElement("div");
     ripple.className = "touch-ripple";
-    ripple.style.left = `${e.clientX / zoom}px`;
-    ripple.style.top = `${e.clientY / zoom}px`;
+    ripple.style.left = `${e.clientX}px`;
+    ripple.style.top = `${e.clientY}px`;
     ripple.addEventListener("animationend", () => ripple.remove());
     document.body.appendChild(ripple);
   });
@@ -1363,6 +1423,7 @@
 
   // ---------- Init ----------
 
+  updateHeaderDensity();
   render();
   loadEvents();
   loadWeather();

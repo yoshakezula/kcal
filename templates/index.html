@@ -1,49 +1,76 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" style="--ui-scale: {{ ui_scale }}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="color-scheme" content="light" />
+  <meta name="theme-color" content="#ffffff" />
   <title>Kcal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-  {% if ui_scale and ui_scale != 1.0 %}
-  <style>html { zoom: {{ ui_scale }}; }</style>
-  {% endif %}
 </head>
 <body class="{{ 'show-cursor' if show_cursor else '' }}" data-sleep-enabled="{{ 'true' if sleep_enabled else 'false' }}" data-view="{{ view }}">
   <div id="app">
     <header class="app-header" id="appHeader">
-      <button class="icon-button" id="todayBtn" aria-label="Today">Today</button>
-      <button class="icon-button nav-button" id="prevBtn" aria-label="Previous">&#8249;</button>
-      <button class="icon-button nav-button" id="nextBtn" aria-label="Next">&#8250;</button>
+      <div class="nav-cluster">
+        <button class="nav-button" id="prevBtn" aria-label="Previous">&#8249;</button>
+        <button id="todayBtn">Today</button>
+        <button class="nav-button" id="nextBtn" aria-label="Next">&#8250;</button>
+      </div>
+
       <h1 id="rangeLabel" class="range-label"></h1>
       <div class="header-spacer"></div>
+
       <button class="icon-button tasks-button" id="tasksBtn" aria-label="Tasks">Tasks</button>
+
       <div class="view-toggle" role="group" aria-label="View">
-        <button class="view-toggle-btn {{ 'active' if view == 'month' }}" data-view="month" id="monthBtn">Month</button>
-        <button class="view-toggle-btn {{ 'active' if view == 'week' }}" data-view="week" id="weekBtn">Week</button>
-        <button class="view-toggle-btn {{ 'active' if view == 'week2' }}" data-view="week2" id="week2Btn">2 Week</button>
-        <button class="view-toggle-btn {{ 'active' if view == 'week3' }}" data-view="week3" id="week3Btn">3 Week</button>
-        <button class="view-toggle-btn {{ 'active' if view == 'list' }}" data-view="list" id="listBtn">List</button>
+        <button class="view-toggle-btn {{ 'active' if view == 'month' }}" data-view="month" id="monthBtn" aria-label="Month">
+          <span class="view-label-long">Month</span><span class="view-label-short">M</span>
+        </button>
+        <button class="view-toggle-btn {{ 'active' if view == 'week' }}" data-view="week" id="weekBtn" aria-label="Week">
+          <span class="view-label-long">Week</span><span class="view-label-short">W</span>
+        </button>
+        <button class="view-toggle-btn {{ 'active' if view == 'week2' }}" data-view="week2" id="week2Btn" aria-label="2 weeks">
+          <span class="view-label-long">2 Week</span><span class="view-label-short">2W</span>
+        </button>
+        <button class="view-toggle-btn {{ 'active' if view == 'week3' }}" data-view="week3" id="week3Btn" aria-label="3 weeks">
+          <span class="view-label-long">3 Week</span><span class="view-label-short">3W</span>
+        </button>
+        <button class="view-toggle-btn {{ 'active' if view == 'list' }}" data-view="list" id="listBtn" aria-label="List">
+          <span class="view-label-long">List</span><span class="view-label-short">List</span>
+        </button>
       </div>
+
       <button class="icon-button" id="refreshBtn" aria-label="Refresh">&#8635;</button>
-      <button class="icon-button" id="fullscreenBtn" aria-label="Toggle fullscreen">&#9974;</button>
-      <a class="icon-button settings-link" href="{{ url_for('settings') }}" aria-label="Settings">&#9881;</a>
+
+      <!-- Set-once controls live behind the overflow menu so they stop
+           competing with the ones used every day. -->
+      <div class="header-menu">
+        <button class="icon-button" id="moreBtn" aria-label="More" aria-haspopup="true" aria-expanded="false">&#8943;</button>
+        <div class="menu-popup hidden" id="morePopup" role="menu">
+          <button class="menu-item" id="fullscreenBtn" role="menuitem">
+            <span class="menu-item-icon">&#9974;</span>Fullscreen
+          </button>
+          <a class="menu-item settings-link" href="{{ url_for('settings') }}" role="menuitem">
+            <span class="menu-item-icon">&#9881;</span>Settings
+          </a>
+        </div>
+      </div>
+
+      <!-- Indeterminate refresh indicator; sits on the header's bottom edge
+           so the calendar underneath stays readable during a fetch. -->
+      <div id="progressBar" class="progress-bar"></div>
     </header>
 
     <div id="forecastStrip" class="forecast-strip hidden"></div>
 
     <main id="content" class="content">
       <div id="contentInner" class="content-inner"></div>
-      <div id="loadingOverlay" class="loading-overlay hidden">
-        <div class="spinner"></div>
-        <div class="loading-text">Loading&hellip;</div>
-      </div>
     </main>
   </div>
 
   <div id="overlay" class="overlay hidden">
     <div class="overlay-backdrop" id="overlayBackdrop"></div>
-    <div class="overlay-panel">
+    <div class="overlay-panel scroll-y">
       <button class="overlay-close" id="overlayClose" aria-label="Close">&times;</button>
       <div id="overlayBody"></div>
     </div>

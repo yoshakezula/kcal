@@ -51,6 +51,13 @@ def index():
     )
 
 
+def _saved_redirect(card):
+    """Redirect back to Settings, flagging which card was just written so
+    the page can confirm the save (and scroll back to it) instead of
+    silently re-rendering an identical-looking form."""
+    return redirect(url_for("settings", saved=card, _anchor=card))
+
+
 def _settings_context(zip_code=None, zip_error=None):
     try:
         calendars = gcal.list_calendars()
@@ -77,6 +84,7 @@ def _settings_context(zip_code=None, zip_error=None):
         "ui_scale": get_ui_scale(),
         "show_cursor": SHOW_CURSOR,
         "sleep_enabled": get_sleep_enabled(),
+        "saved": request.args.get("saved"),
     }
 
 
@@ -85,7 +93,7 @@ def settings():
     if request.method == "POST":
         selected_ids = request.form.getlist("calendar_id")
         set_calendar_ids(selected_ids or ["primary"])
-        return redirect(url_for("settings"))
+        return _saved_redirect("calendars")
 
     return render_template("settings.html", **_settings_context())
 
@@ -110,26 +118,26 @@ def settings_location():
         return render_template("settings.html", **_settings_context(zip_code=zip_code, zip_error=zip_error))
 
     set_zip_code(zip_code)
-    return redirect(url_for("settings"))
+    return _saved_redirect("location")
 
 
 @app.route("/settings/tasks", methods=["POST"])
 def settings_tasks():
     task_list_id = request.form.get("task_list_id") or None
     set_task_list_id(task_list_id)
-    return redirect(url_for("settings"))
+    return _saved_redirect("tasks")
 
 
 @app.route("/settings/points", methods=["POST"])
 def settings_points():
     set_points_tracking(bool(request.form.get("points_tracking")))
-    return redirect(url_for("settings"))
+    return _saved_redirect("points")
 
 
 @app.route("/settings/sleep", methods=["POST"])
 def settings_sleep():
     set_sleep_enabled(bool(request.form.get("sleep_enabled")))
-    return redirect(url_for("settings"))
+    return _saved_redirect("sleep")
 
 
 @app.route("/settings/display", methods=["POST"])
@@ -139,7 +147,7 @@ def settings_display():
     except ValueError:
         scale = 1.0
     set_ui_scale(scale)
-    return redirect(url_for("settings"))
+    return _saved_redirect("display")
 
 
 @app.route("/api/weather")
