@@ -16,7 +16,12 @@ DEFAULTS = {
     "points_tracking": False,
     "ui_scale": 1.0,
     "sleep_enabled": False,
+    "view": "week3",
 }
+
+# The view names the frontend uses; anything else is rejected so a stale or
+# hand-edited config can't leave the kiosk on a view that doesn't render.
+VIEWS = ("month", "week", "week2", "week3", "list")
 
 
 def load_config():
@@ -86,6 +91,22 @@ def set_ui_scale(scale):
     config = load_config()
     config["ui_scale"] = min(max(float(scale), 0.7), 1.8)
     save_config(config)
+
+
+def get_view():
+    view = load_config().get("view")
+    return view if view in VIEWS else DEFAULTS["view"]
+
+
+def set_view(view):
+    """Persist the last-used view. Returns False (saving nothing) if the
+    name isn't one the frontend knows."""
+    if view not in VIEWS:
+        return False
+    config = load_config()
+    config["view"] = view
+    save_config(config)
+    return True
 
 
 def get_sleep_enabled():

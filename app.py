@@ -13,12 +13,14 @@ from config import (
     get_sleep_enabled,
     get_task_list_id,
     get_ui_scale,
+    get_view,
     get_zip_code,
     set_calendar_ids,
     set_points_tracking,
     set_sleep_enabled,
     set_task_list_id,
     set_ui_scale,
+    set_view,
     set_zip_code,
 )
 
@@ -45,6 +47,7 @@ def index():
         ui_scale=get_ui_scale(),
         show_cursor=SHOW_CURSOR,
         sleep_enabled=get_sleep_enabled(),
+        view=get_view(),
     )
 
 
@@ -234,6 +237,16 @@ def api_tasks_toggle():
         return jsonify({"error": "unknown", "message": str(e)}), 500
 
     return jsonify({"task": task, "totalPoints": total_points})
+
+
+@app.route("/api/view", methods=["POST"])
+def api_view():
+    """Remember which view the kiosk is on, so a restart comes back to it."""
+    data = request.get_json(silent=True) or {}
+    view = data.get("view")
+    if not set_view(view):
+        return jsonify({"error": "bad_request", "message": "unknown view"}), 400
+    return jsonify({"view": view})
 
 
 if __name__ == "__main__":

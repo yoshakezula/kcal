@@ -9,7 +9,7 @@
   <style>html { zoom: {{ ui_scale }}; }</style>
   {% endif %}
 </head>
-<body class="{{ 'show-cursor' if show_cursor else '' }}" data-sleep-enabled="{{ 'true' if sleep_enabled else 'false' }}">
+<body class="{{ 'show-cursor' if show_cursor else '' }}" data-sleep-enabled="{{ 'true' if sleep_enabled else 'false' }}" data-view="{{ view }}">
   <div id="app">
     <header class="app-header" id="appHeader">
       <button class="icon-button" id="todayBtn" aria-label="Today">Today</button>
@@ -19,11 +19,11 @@
       <div class="header-spacer"></div>
       <button class="icon-button tasks-button" id="tasksBtn" aria-label="Tasks">Tasks</button>
       <div class="view-toggle" role="group" aria-label="View">
-        <button class="view-toggle-btn" data-view="month" id="monthBtn">Month</button>
-        <button class="view-toggle-btn" data-view="week" id="weekBtn">Week</button>
-        <button class="view-toggle-btn active" data-view="week2" id="week2Btn">2 Week</button>
-        <button class="view-toggle-btn" data-view="week3" id="week3Btn">3 Week</button>
-        <button class="view-toggle-btn" data-view="list" id="listBtn">List</button>
+        <button class="view-toggle-btn {{ 'active' if view == 'month' }}" data-view="month" id="monthBtn">Month</button>
+        <button class="view-toggle-btn {{ 'active' if view == 'week' }}" data-view="week" id="weekBtn">Week</button>
+        <button class="view-toggle-btn {{ 'active' if view == 'week2' }}" data-view="week2" id="week2Btn">2 Week</button>
+        <button class="view-toggle-btn {{ 'active' if view == 'week3' }}" data-view="week3" id="week3Btn">3 Week</button>
+        <button class="view-toggle-btn {{ 'active' if view == 'list' }}" data-view="list" id="listBtn">List</button>
       </div>
       <button class="icon-button" id="refreshBtn" aria-label="Refresh">&#8635;</button>
       <button class="icon-button" id="fullscreenBtn" aria-label="Toggle fullscreen">&#9974;</button>

@@ -39,7 +39,10 @@
   let monthChipCapacity = 3;
 
   const state = {
-    view: "week2", // "month" | "week" | "week2" | "week3" | "list"
+    // "month" | "week" | "week2" | "week3" | "list". The last-used view is
+    // persisted server-side (config.json) and handed in on the body, so a
+    // kiosk restart comes back to whatever was on screen.
+    view: document.body.dataset.view || "week3",
     anchor: startOfDay(new Date()),
     events: [],
   };
@@ -1214,6 +1217,16 @@
     loadEvents();
   }
 
+  // Best effort: if the save doesn't land, the only cost is that the next
+  // restart comes up on the previously saved view.
+  function saveView(view) {
+    fetch("/api/view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ view }),
+    }).catch(() => {});
+  }
+
   function setView(view) {
     if (view === state.view) return;
     state.view = view;
@@ -1222,6 +1235,7 @@
     el.week2Btn.classList.toggle("active", view === "week2");
     el.week3Btn.classList.toggle("active", view === "week3");
     el.listBtn.classList.toggle("active", view === "list");
+    saveView(view);
     updateForecastVisibility();
     render();
   }
