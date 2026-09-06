@@ -131,20 +131,37 @@
     return new Date(value);
   }
 
+  // The first calendar day an event occupies.
+  function eventFirstDay(evt) {
+    return startOfDay(parseEventBoundary(evt.start, evt.allDay));
+  }
+
+  // The last calendar day an event actually occupies. Google's all-day "end"
+  // date is exclusive, and a timed event ending exactly at midnight belongs to
+  // the day before rather than spilling onto the next one.
+  function eventLastDay(evt) {
+    const first = eventFirstDay(evt);
+    if (!evt.end) return first;
+    const end = parseEventBoundary(evt.end, evt.allDay);
+    let last = startOfDay(end);
+    if (evt.allDay || end.getTime() === last.getTime()) last = addDays(last, -1);
+    return last < first ? first : last;
+  }
+
+  // How many calendar days the event covers, inclusive of both ends.
+  function eventDaySpan(evt) {
+    return Math.round((eventLastDay(evt) - eventFirstDay(evt)) / 86400000) + 1;
+  }
+
   // Returns the array of date-keys (within [rangeStart, rangeEnd] inclusive)
-  // that this event touches. Google's all-day "end" date is exclusive.
+  // that this event touches, so a multi-day event lands on every day it spans.
   function eventDayKeys(evt, rangeStart, rangeEnd) {
-    const start = parseEventBoundary(evt.start, evt.allDay);
-    let end = parseEventBoundary(evt.end, evt.allDay);
-    if (evt.allDay) {
-      end = addDays(end, -1); // exclusive -> inclusive last day
-    } else {
-      end = start; // timed events are placed on their start day only
-    }
+    const first = eventFirstDay(evt);
+    const lastDay = eventLastDay(evt);
 
     const keys = [];
-    let cursor = startOfDay(start) < rangeStart ? rangeStart : startOfDay(start);
-    const last = startOfDay(end) > rangeEnd ? rangeEnd : startOfDay(end);
+    let cursor = first < rangeStart ? rangeStart : first;
+    const last = lastDay > rangeEnd ? rangeEnd : lastDay;
     while (cursor <= last) {
       keys.push(dateKey(cursor));
       cursor = addDays(cursor, 1);
@@ -175,10 +192,21 @@
     return `${h}h ${m}m`;
   }
 
+  // "Sep 6" — used to disambiguate the ends of a multi-day event.
+  function formatDayStamp(date) {
+    return `${MONTH_NAMES[date.getMonth()].slice(0, 3)} ${date.getDate()}`;
+  }
+
   function eventTimeLabel(evt) {
-    if (evt.allDay) return "All day";
+    const days = eventDaySpan(evt);
+    if (evt.allDay) return days > 1 ? `All day · ${days} days` : "All day";
     const start = parseEventBoundary(evt.start, false);
     const end = parseEventBoundary(evt.end, false);
+    // A multi-day event shows on each of its days, so the bare times would be
+    // ambiguous there: stamp them with their dates instead of a duration.
+    if (days > 1) {
+      return `${formatDayStamp(start)} ${formatTime(start)} – ${formatDayStamp(end)} ${formatTime(end)}`;
+    }
     return `${formatTime(start)} – ${formatTime(end)} · ${formatDuration(start, end)}`;
   }
 
@@ -714,9 +742,12 @@
 
         const chipsHtml = shown
           .map((evt) => {
-            const timeHtml = evt.allDay
-              ? ""
-              : `<span class="event-chip-time">${formatShortTime(parseEventBoundary(evt.start, false))}</span>`;
+            // On the continuation days of a multi-day event the start time
+            // isn't this day's time, so only stamp it on the day it starts.
+            const timeHtml =
+              evt.allDay || dateKey(eventFirstDay(evt)) !== key
+                ? ""
+                : `<span class="event-chip-time">${formatShortTime(parseEventBoundary(evt.start, false))}</span>`;
             // --chip drives both the rail and the tinted fill (see .event-chip):
             // painting the raw color as a background under white text was
             // unreadable for the light entries in Google's palette.
