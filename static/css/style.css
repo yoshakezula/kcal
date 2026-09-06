@@ -1165,22 +1165,39 @@ body.compact-header .view-toggle-btn {
 
 /* ---------- Tasks ---------- */
 
-.task-list-select {
-  width: 100%;
+/* One column per enabled task list, side by side. auto-fit means a single
+   list still fills the (narrower) panel, and a cramped screen wraps the
+   columns instead of squeezing the titles. */
+.task-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  align-items: start;
+  gap: 0.5rem 1.5rem;
+  margin-top: 1.125rem;
+}
+
+.task-column {
+  min-width: 0;
+}
+
+.task-column-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+.task-column-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
   font-size: var(--fs-md);
-  min-height: var(--touch);
-  padding: 0 2.25rem 0 0.75rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-lg);
-  margin: 0.625rem 0 1rem;
-  background: var(--surface);
-  color: var(--text);
-  appearance: none;
-  background-image: var(--chevron);
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1rem;
-  cursor: pointer;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .task-list {
@@ -1274,11 +1291,10 @@ body.compact-header .view-toggle-btn {
 }
 
 .task-points-total {
-  font-size: var(--fs-md);
-  font-weight: 600;
-  text-align: right;
-  margin: 0.25rem 0 -0.25rem;
-  color: var(--text-muted);
+  flex: 0 0 auto;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  color: var(--accent);
 }
 
 /* ---------- Hourly forecast ---------- */
@@ -1704,7 +1720,6 @@ body.settings-page {
 
 /* Inline forms (a field plus its Save button on one row). */
 .location-form,
-.tasklist-form,
 .display-form {
   display: flex;
   align-items: center;
@@ -1713,7 +1728,6 @@ body.settings-page {
 }
 
 .location-form .save-button,
-.tasklist-form .save-button,
 .display-form .save-button {
   margin-top: 0;
 }
@@ -1723,8 +1737,7 @@ body.settings-page {
   margin-top: 1rem;
 }
 
-.location-form input,
-.tasklist-form select {
+.location-form input {
   flex: 1 1 auto;
   min-width: 0;
   font-size: var(--fs-md);
@@ -1738,21 +1751,10 @@ body.settings-page {
     box-shadow var(--dur-fast) var(--ease);
 }
 
-.location-form input:focus,
-.tasklist-form select:focus {
+.location-form input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.tasklist-form select {
-  appearance: none;
-  padding-right: 2.25rem;
-  background-image: var(--chevron);
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1rem;
-  cursor: pointer;
 }
 
 /* Range input, styled to match the buttons rather than the OS default. */

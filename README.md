@@ -13,8 +13,8 @@ the only write it makes is checking/unchecking tasks off in Google Tasks.
   each day's high/low temperature and high/low humidity.
 - **Tasks** — a blue **Tasks** button next to the view switcher opens a
   popup listing your Google Tasks, with a checkbox to mark each one done.
-  Switch between task lists from a dropdown at the top of the popup, and
-  pick a default list to open in Settings.
+  Every task list you enabled in Settings shows side by side, one column
+  each, with its own points total.
 - **Touch** — swipe left/right to move between periods, tap a day/event for
   details.
 
@@ -115,9 +115,9 @@ Then visit **http://127.0.0.1:5000/settings** in a browser and check off
 whichever calendars you want merged into the kiosk view (your primary
 calendar is selected by default). Save, then go back to the main view.
 
-On the same Settings page, pick a **default task list** under Tasks — that's
-the list the Tasks popup opens to on the kiosk view (you can still switch
-lists from the popup's dropdown).
+On the same Settings page, check off which **task lists** to show under
+Tasks. The Tasks popup shows every checked list side by side, one column
+each — handy for a list per kid. Leave every box unchecked to show them all.
 
 Also on the same page, set a **zip code** under Weather Location to control
 the 7-day forecast strip at the top of the kiosk view (defaults to `90008`).

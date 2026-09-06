@@ -57,13 +57,26 @@
         folder, then reload this page.
       </p>
     {% else %}
-      <p class="settings-hint">Choose which task list opens by default on the kiosk display.</p>
-      <form method="post" action="{{ url_for('settings_tasks') }}" class="tasklist-form">
-        <select name="task_list_id" aria-label="Default task list">
+      <p class="settings-hint">
+        Choose which task lists the Tasks popup shows — they appear side by
+        side, one column each. Leave every box unchecked to show them all.
+      </p>
+      <form method="post" action="{{ url_for('settings_tasks') }}">
+        <ul class="calendar-list">
           {% for tl in task_lists %}
-            <option value="{{ tl.id }}" {% if tl.id == selected_task_list %}selected{% endif %}>{{ tl.title }}</option>
+            <li>
+              <label class="calendar-option">
+                <input
+                  type="checkbox"
+                  name="task_list_id"
+                  value="{{ tl.id }}"
+                  {% if tl.id in selected_task_lists %}checked{% endif %}
+                />
+                <span class="calendar-name">{{ tl.title }}</span>
+              </label>
+            </li>
           {% endfor %}
-        </select>
+        </ul>
         <button type="submit" class="save-button">Save</button>
       </form>
     {% endif %}

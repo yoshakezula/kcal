@@ -11,14 +11,14 @@ from config import (
     get_calendar_ids,
     get_points_tracking,
     get_sleep_enabled,
-    get_task_list_id,
+    get_task_list_ids,
     get_ui_scale,
     get_view,
     get_zip_code,
     set_calendar_ids,
     set_points_tracking,
     set_sleep_enabled,
-    set_task_list_id,
+    set_task_list_ids,
     set_ui_scale,
     set_view,
     set_zip_code,
@@ -79,7 +79,7 @@ def _settings_context(zip_code=None, zip_error=None):
         "zip_error": zip_error,
         "task_lists": task_lists,
         "task_error": task_error,
-        "selected_task_list": get_task_list_id(),
+        "selected_task_lists": set(get_task_list_ids()),
         "points_tracking": get_points_tracking(),
         "ui_scale": get_ui_scale(),
         "show_cursor": SHOW_CURSOR,
@@ -123,8 +123,7 @@ def settings_location():
 
 @app.route("/settings/tasks", methods=["POST"])
 def settings_tasks():
-    task_list_id = request.form.get("task_list_id") or None
-    set_task_list_id(task_list_id)
+    set_task_list_ids(request.form.getlist("task_list_id"))
     return _saved_redirect("tasks")
 
 
@@ -206,12 +205,22 @@ def api_tasklists():
     except Exception as e:
         return jsonify({"error": "unknown", "message": str(e)}), 500
 
-    return jsonify({"taskLists": task_lists, "defaultId": get_task_list_id()})
+    # An empty selection means "show them all", so resolve it here rather
+    # than leaving the frontend to know that rule.
+    enabled_ids = get_task_list_ids()
+    if enabled_ids:
+        known = {tl["id"] for tl in task_lists}
+        enabled_ids = [i for i in enabled_ids if i in known]
+    if not enabled_ids:
+        enabled_ids = [tl["id"] for tl in task_lists]
+
+    return jsonify({"taskLists": task_lists, "enabledIds": enabled_ids})
 
 
 @app.route("/api/tasks")
 def api_tasks():
-    task_list_id = request.args.get("tasklist") or get_task_list_id() or "@default"
+    enabled_ids = get_task_list_ids()
+    task_list_id = request.args.get("tasklist") or (enabled_ids[0] if enabled_ids else "@default")
     points_enabled = get_points_tracking()
 
     try:

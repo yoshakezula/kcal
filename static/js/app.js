@@ -1059,14 +1059,15 @@
 
   // ---------- Tasks ----------
 
-  // Task lists are fetched once and cached; the selected list and its tasks
-  // are refetched whenever the dropdown changes or the popup is reopened.
+  // Task lists are fetched once and cached; every enabled list's tasks are
+  // refetched together whenever the popup's data is reloaded. Which lists
+  // are enabled is a setting (Settings -> Tasks); the server resolves an
+  // empty selection to "all of them" before we ever see it.
   const taskState = {
-    taskLists: [],
-    selectedListId: null,
-    tasks: [],
+    taskLists: [],  // every list on the account
+    enabledIds: [], // the ones the kiosk shows, in the order to show them
+    columns: [],    // [{id, title, tasks, totalPoints}], one per enabled list
     pointsEnabled: false,
-    totalPoints: 0,
     loaded: false, // true once a load attempt (success or failure) has completed
     loadOk: false,
   };
@@ -1076,53 +1077,52 @@
     return String(str).replace(/"/g, "&quot;");
   }
 
-  function buildTasksOverlayHtml() {
-    const optionsHtml = taskState.taskLists
-      .map(
-        (tl) =>
-          `<option value="${escapeAttr(tl.id)}" ${tl.id === taskState.selectedListId ? "selected" : ""}>${escapeHtml(tl.title)}</option>`
-      )
-      .join("");
+  function taskRowHtml(task, listId) {
+    return `
+      <div class="task-row ${task.completed ? "task-completed" : ""}" data-task-id="${escapeAttr(task.id)}" data-list-id="${escapeAttr(listId)}">
+        <button class="task-check ${task.completed ? "checked" : ""}" aria-label="${task.completed ? "Mark incomplete" : "Mark complete"}"></button>
+        <div class="task-title">${escapeHtml(task.title)}</div>
+        ${taskState.pointsEnabled && task.points ? `<div class="task-points">+${task.points}</div>` : ""}
+      </div>`;
+  }
 
-    const rowsHtml = taskState.tasks.length
-      ? taskState.tasks
-          .map(
-            (t) => `
-        <div class="task-row ${t.completed ? "task-completed" : ""}" data-task-id="${escapeAttr(t.id)}">
-          <button class="task-check ${t.completed ? "checked" : ""}" aria-label="${t.completed ? "Mark incomplete" : "Mark complete"}"></button>
-          <div class="task-title">${escapeHtml(t.title)}</div>
-          ${taskState.pointsEnabled && t.points ? `<div class="task-points">+${t.points}</div>` : ""}
-        </div>`
-          )
-          .join("")
-      : `<p class="task-empty">No tasks in this list.</p>`;
+  function taskColumnHtml(column) {
+    const rowsHtml = column.tasks.length
+      ? column.tasks.map((t) => taskRowHtml(t, column.id)).join("")
+      : `<p class="task-empty">Nothing here.</p>`;
 
-    const totalPointsHtml = taskState.pointsEnabled
-      ? `<div class="task-points-total">Total Points: ${taskState.totalPoints || 0}</div>`
+    // Each list keeps its own points total (the bookkeeping task lives in
+    // the list), so the total belongs in the column header.
+    const totalHtml = taskState.pointsEnabled
+      ? `<div class="task-points-total">${column.totalPoints || 0} pts</div>`
       : "";
 
     return `
+      <section class="task-column">
+        <div class="task-column-head">
+          <h3 class="task-column-title">${escapeHtml(column.title)}</h3>
+          ${totalHtml}
+        </div>
+        <div class="task-list">${rowsHtml}</div>
+      </section>`;
+  }
+
+  function buildTasksOverlayHtml() {
+    const columnsHtml = taskState.columns.map(taskColumnHtml).join("");
+    return `
       <h2>Tasks</h2>
-      ${totalPointsHtml}
-      <select class="task-list-select" id="taskListSelect">${optionsHtml}</select>
-      <div class="task-list" id="taskListBody">${rowsHtml}</div>`;
+      <div class="task-columns">${columnsHtml}</div>`;
   }
 
   function renderTasksOverlay() {
-    openOverlay(buildTasksOverlayHtml());
-
-    const selectEl = document.getElementById("taskListSelect");
-    if (selectEl) {
-      selectEl.addEventListener("change", () => {
-        taskState.selectedListId = selectEl.value;
-        loadTasksForSelectedList();
-      });
-    }
+    // Several lists side by side need the room; a single one reads better
+    // in the normal-width panel.
+    openOverlay(buildTasksOverlayHtml(), { wide: taskState.columns.length > 1 });
 
     el.overlayBody.querySelectorAll(".task-check").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const taskId = btn.closest(".task-row").getAttribute("data-task-id");
-        toggleTask(taskId);
+        const row = btn.closest(".task-row");
+        toggleTask(row.getAttribute("data-list-id"), row.getAttribute("data-task-id"));
       });
     });
   }
@@ -1133,40 +1133,40 @@
       if (!response.ok) return false;
       const data = await response.json();
       taskState.taskLists = data.taskLists || [];
-      if (!taskState.taskLists.some((tl) => tl.id === taskState.selectedListId)) {
-        const fallback = taskState.taskLists.find((tl) => tl.id === data.defaultId) || taskState.taskLists[0];
-        taskState.selectedListId = fallback ? fallback.id : null;
-      }
+      taskState.enabledIds = data.enabledIds || [];
       return true;
     } catch (err) {
       return false;
     }
   }
 
-  async function loadTasksForSelectedList(opts) {
-    const silent = !!(opts && opts.silent);
-    if (!taskState.selectedListId) {
-      taskState.tasks = [];
-      taskState.pointsEnabled = false;
-      taskState.totalPoints = 0;
-      if (!silent) renderTasksOverlay();
-      return;
-    }
-    try {
-      const response = await fetch(`/api/tasks?tasklist=${encodeURIComponent(taskState.selectedListId)}`);
-      const data = response.ok ? await response.json() : {};
-      taskState.tasks = data.tasks || [];
-      taskState.pointsEnabled = !!data.pointsEnabled;
-      taskState.totalPoints = data.totalPoints || 0;
-    } catch (err) {
-      taskState.tasks = [];
-      taskState.pointsEnabled = false;
-      taskState.totalPoints = 0;
-    }
-    if (!silent) renderTasksOverlay();
+  // Fetches every enabled list in parallel — one column each, in the order
+  // the server handed the IDs back. A list that fails to load becomes an
+  // empty column rather than taking the whole popup down with it.
+  async function loadTaskColumns() {
+    const lists = taskState.enabledIds
+      .map((id) => taskState.taskLists.find((tl) => tl.id === id))
+      .filter(Boolean);
+
+    taskState.columns = await Promise.all(
+      lists.map(async (tl) => {
+        const column = { id: tl.id, title: tl.title, tasks: [], totalPoints: 0, pointsEnabled: false };
+        try {
+          const response = await fetch(`/api/tasks?tasklist=${encodeURIComponent(tl.id)}`);
+          const data = response.ok ? await response.json() : {};
+          column.tasks = data.tasks || [];
+          column.totalPoints = data.totalPoints || 0;
+          column.pointsEnabled = !!data.pointsEnabled;
+        } catch (err) {
+          // leave the column empty
+        }
+        return column;
+      })
+    );
+    taskState.pointsEnabled = taskState.columns.some((c) => c.pointsEnabled);
   }
 
-  // Loads task lists + the selected list's tasks, sharing one in-flight
+  // Loads task lists + every enabled list's tasks, sharing one in-flight
   // promise so a background prefetch (triggered on every calendar reload)
   // and an overlay open racing it don't fire duplicate requests. Resolves
   // `tasksPromise` back to null when done so the next calendar reload
@@ -1177,8 +1177,8 @@
       try {
         const ok = await loadTaskLists();
         taskState.loadOk = ok;
-        if (ok && taskState.taskLists.length) {
-          await loadTasksForSelectedList({ silent: true });
+        if (ok && taskState.enabledIds.length) {
+          await loadTaskColumns();
         }
       } finally {
         taskState.loaded = true;
@@ -1197,21 +1197,22 @@
       openOverlay(`<h2>Tasks</h2><p>Couldn't load task lists. Check Settings.</p>`);
       return;
     }
-    if (!taskState.taskLists.length) {
+    if (!taskState.columns.length) {
       openOverlay(`<h2>Tasks</h2><p>No task lists found.</p>`);
       return;
     }
     renderTasksOverlay();
   }
 
-  async function toggleTask(taskId) {
-    const task = taskState.tasks.find((t) => t.id === taskId);
+  async function toggleTask(listId, taskId) {
+    const column = taskState.columns.find((c) => c.id === listId);
+    const task = column && column.tasks.find((t) => t.id === taskId);
     if (!task) return;
     const newCompleted = !task.completed;
     const pointsDelta = taskState.pointsEnabled && task.points ? (newCompleted ? task.points : -task.points) : 0;
 
     task.completed = newCompleted; // optimistic
-    if (pointsDelta) taskState.totalPoints = (taskState.totalPoints || 0) + pointsDelta;
+    if (pointsDelta) column.totalPoints = (column.totalPoints || 0) + pointsDelta;
     renderTasksOverlay();
     if (newCompleted) fireConfetti();
 
@@ -1219,17 +1220,17 @@
       const response = await fetch("/api/tasks/toggle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tasklist: taskState.selectedListId, task: taskId, completed: newCompleted }),
+        body: JSON.stringify({ tasklist: listId, task: taskId, completed: newCompleted }),
       });
       if (!response.ok) throw new Error("toggle failed");
       const data = await response.json();
       if (typeof data.totalPoints === "number") {
-        taskState.totalPoints = data.totalPoints;
+        column.totalPoints = data.totalPoints;
         renderTasksOverlay();
       }
     } catch (err) {
       task.completed = !newCompleted; // revert on failure
-      if (pointsDelta) taskState.totalPoints = (taskState.totalPoints || 0) - pointsDelta;
+      if (pointsDelta) column.totalPoints = (column.totalPoints || 0) - pointsDelta;
       renderTasksOverlay();
     }
   }

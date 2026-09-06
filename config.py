@@ -12,7 +12,7 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 DEFAULTS = {
     "calendar_ids": ["primary"],
     "zip_code": "90008",
-    "task_list_id": None,
+    "task_list_ids": [],
     "points_tracking": False,
     "ui_scale": 1.0,
     "sleep_enabled": False,
@@ -59,13 +59,25 @@ def set_zip_code(zip_code):
     save_config(config)
 
 
-def get_task_list_id():
-    return load_config().get("task_list_id") or DEFAULTS["task_list_id"]
-
-
-def set_task_list_id(task_list_id):
+def get_task_list_ids():
+    """Which task lists the kiosk shows, as a list of IDs. An empty list
+    means "every list the account has" — so the Tasks button is never dead
+    just because nothing has been picked yet."""
     config = load_config()
-    config["task_list_id"] = task_list_id
+    ids = [i for i in (config.get("task_list_ids") or []) if i]
+    if not ids:
+        # Migrate the old single-list setting, from before the Tasks popup
+        # showed several lists side by side. Dropped once a selection is
+        # saved (see set_task_list_ids).
+        legacy = config.get("task_list_id")
+        return [legacy] if legacy else []
+    return ids
+
+
+def set_task_list_ids(task_list_ids):
+    config = load_config()
+    config["task_list_ids"] = list(task_list_ids)
+    config.pop("task_list_id", None)  # drop the superseded single-list key
     save_config(config)
 
 
