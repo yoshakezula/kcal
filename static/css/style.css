@@ -899,6 +899,13 @@ button, a {
   opacity: 0.85;
 }
 
+.hourly-now-line {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  opacity: 0.5;
+}
+
 .hourly-marker {
   stroke: var(--surface);
   stroke-width: 2;
@@ -906,6 +913,10 @@ button, a {
 
 .hourly-marker-temp {
   fill: var(--temp-color);
+}
+
+.hourly-marker-humidity {
+  fill: var(--humidity-color);
 }
 
 .hourly-point-label {
@@ -927,7 +938,6 @@ button, a {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   padding: 2px 0;
-  border-radius: 3px;
 }
 
 .hourly-empty {

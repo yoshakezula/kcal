@@ -330,7 +330,7 @@
   // Two series, two scales: temperature reads off the left axis, humidity
   // (always 0-100%) off the right - each drawn in its own color so the
   // axis a value belongs to is never ambiguous.
-  function buildHourlyChartSvg(hours) {
+  function buildHourlyChartSvg(hours, showNow) {
     const temps = hours.map((h) => h.temp).filter((t) => t != null);
     if (!temps.length) {
       return `<p class="hourly-empty">No hourly temperature data.</p>`;
@@ -346,14 +346,6 @@
     const xAt = (i) => (n <= 1 ? HOURLY_PAD_LEFT + plotW / 2 : HOURLY_PAD_LEFT + (i / (n - 1)) * plotW);
     const yTempAt = (t) => HOURLY_PAD_TOP + ((tempMax - t) / tempSpan) * plotH;
     const yHumAt = (h) => HOURLY_PAD_TOP + ((100 - h) / 100) * plotH;
-
-    let maxIdx = -1;
-    let minIdx = -1;
-    hours.forEach((h, i) => {
-      if (h.temp == null) return;
-      if (maxIdx === -1 || h.temp > hours[maxIdx].temp) maxIdx = i;
-      if (minIdx === -1 || h.temp < hours[minIdx].temp) minIdx = i;
-    });
 
     const tempPoints = hours
       .map((h, i) => (h.temp != null ? `${xAt(i).toFixed(1)},${yTempAt(h.temp).toFixed(1)}` : null))
@@ -380,23 +372,54 @@
       })
       .join("");
 
-    let markersHtml = "";
-    if (maxIdx !== -1) {
-      const x = xAt(maxIdx);
-      const y = yTempAt(hours[maxIdx].temp);
-      const labelY = y < HOURLY_PAD_TOP + 16 ? y + 16 : y - 8;
-      markersHtml += `
-        <circle cx="${x}" cy="${y}" r="4" class="hourly-marker hourly-marker-temp" />
-        <text x="${x}" y="${labelY}" class="hourly-point-label" text-anchor="middle">${Math.round(hours[maxIdx].temp)}&deg;</text>`;
+    // hours are spaced one hour apart starting at hours[0], so the current
+    // time's fractional position within the array is just its offset (in
+    // hours) from that first entry's hour.
+    let nowLineHtml = "";
+    if (showNow) {
+      const now = new Date();
+      const startHour = parseInt(hours[0].time.slice(0, 2), 10);
+      const nowFraction = now.getHours() + now.getMinutes() / 60 - startHour;
+      if (nowFraction >= 0 && nowFraction <= n - 1) {
+        const x = xAt(nowFraction).toFixed(1);
+        nowLineHtml = `<line x1="${x}" y1="${HOURLY_PAD_TOP}" x2="${x}" y2="${HOURLY_CHART_H - HOURLY_PAD_BOTTOM}" class="hourly-now-line" />`;
+      }
     }
-    if (minIdx !== -1 && minIdx !== maxIdx) {
-      const x = xAt(minIdx);
-      const y = yTempAt(hours[minIdx].temp);
-      const labelY = y > HOURLY_CHART_H - HOURLY_PAD_BOTTOM - 10 ? y - 8 : y + 16;
-      markersHtml += `
-        <circle cx="${x}" cy="${y}" r="4" class="hourly-marker hourly-marker-temp" />
-        <text x="${x}" y="${labelY}" class="hourly-point-label" text-anchor="middle">${Math.round(hours[minIdx].temp)}&deg;</text>`;
-    }
+
+    // Marks the highest and lowest point of one series with a dot + label,
+    // shared between temp and humidity so both get the same treatment.
+    const buildSeriesMarkers = (field, yAt, formatValue, colorClass) => {
+      let maxIdx = -1;
+      let minIdx = -1;
+      hours.forEach((h, i) => {
+        if (h[field] == null) return;
+        if (maxIdx === -1 || h[field] > hours[maxIdx][field]) maxIdx = i;
+        if (minIdx === -1 || h[field] < hours[minIdx][field]) minIdx = i;
+      });
+
+      let html = "";
+      if (maxIdx !== -1) {
+        const x = xAt(maxIdx);
+        const y = yAt(hours[maxIdx][field]);
+        const labelY = y < HOURLY_PAD_TOP + 16 ? y + 16 : y - 8;
+        html += `
+          <circle cx="${x}" cy="${y}" r="4" class="hourly-marker ${colorClass}" />
+          <text x="${x}" y="${labelY}" class="hourly-point-label" text-anchor="middle">${formatValue(hours[maxIdx][field])}</text>`;
+      }
+      if (minIdx !== -1 && minIdx !== maxIdx) {
+        const x = xAt(minIdx);
+        const y = yAt(hours[minIdx][field]);
+        const labelY = y > HOURLY_CHART_H - HOURLY_PAD_BOTTOM - 10 ? y - 8 : y + 16;
+        html += `
+          <circle cx="${x}" cy="${y}" r="4" class="hourly-marker ${colorClass}" />
+          <text x="${x}" y="${labelY}" class="hourly-point-label" text-anchor="middle">${formatValue(hours[minIdx][field])}</text>`;
+      }
+      return html;
+    };
+
+    const markersHtml =
+      buildSeriesMarkers("temp", yTempAt, (v) => `${Math.round(v)}&deg;`, "hourly-marker-temp") +
+      buildSeriesMarkers("humidity", yHumAt, (v) => `${Math.round(v)}%`, "hourly-marker-humidity");
 
     return `
       <svg class="hourly-svg" viewBox="0 0 ${HOURLY_CHART_W} ${HOURLY_CHART_H}" preserveAspectRatio="none">
@@ -404,6 +427,7 @@
         ${humGridHtml}
         <polyline points="${humPoints}" class="hourly-line hourly-line-humidity" fill="none" />
         <polyline points="${tempPoints}" class="hourly-line hourly-line-temp" fill="none" />
+        ${nowLineHtml}
         ${markersHtml}
       </svg>`;
   }
@@ -413,28 +437,46 @@
       <div class="hourly-axis-row" style="padding-left:${HOURLY_PAD_LEFT_PCT}%;padding-right:${HOURLY_PAD_RIGHT_PCT}%">
         ${hours
           .map((h) => {
-            const bg = shadeCell ? shadeCell(h) : null;
-            const style = bg ? ` style="background:${bg}"` : "";
+            const shade = shadeCell ? shadeCell(h) : null;
+            const styleParts = [];
+            if (shade) {
+              styleParts.push(`background:${shade.bg}`);
+              if (shade.color) styleParts.push(`color:${shade.color}`);
+            }
+            const style = styleParts.length ? ` style="${styleParts.join(";")}"` : "";
             return `<div${style}>${formatCell(h)}</div>`;
           })
           .join("")}
       </div>`;
   }
 
+  // Blends an rgb tint at the given alpha over the (always white) card
+  // surface and returns the resulting perceived luminance, so we can tell
+  // whether dark text still reads on top of it.
+  function blendedLuminance(rgb, alpha) {
+    const [r, g, b] = rgb.split(",").map(Number);
+    const blend = (channel) => 255 * (1 - alpha) + channel * alpha;
+    return 0.299 * blend(r) + 0.587 * blend(g) + 0.114 * blend(b);
+  }
+
   // Shades a cell by how far its value sits on a fixed 0-100 scale, not by
   // where it falls within this day's own min/max - so a 40% reading looks
-  // the same shade on a calm day as it does on a volatile one.
+  // the same shade on a calm day as it does on a volatile one. The shade
+  // spans the full range from barely-there to nearly solid, so once it gets
+  // dark enough to fight the default dark text, the text flips to white.
   function absoluteScaleShade(value, rgb) {
     if (value == null) return null;
     const t = Math.max(0, Math.min(100, value)) / 100;
-    const alpha = 0.08 + t * 0.5;
-    return `rgba(${rgb},${alpha.toFixed(2)})`;
+    const alpha = 0.05 + t * 0.9;
+    const color = blendedLuminance(rgb, alpha) < 140 ? "#fff" : null;
+    return { bg: `rgba(${rgb},${alpha.toFixed(2)})`, color };
   }
 
   function buildHourlyForecastHtml(date, hours) {
     const [y, m, d] = date.split("-").map(Number);
     const dayDate = new Date(y, m - 1, d);
     const heading = `${WEEKDAY_NAMES[dayDate.getDay()]}, ${MONTH_NAMES[dayDate.getMonth()]} ${dayDate.getDate()}`;
+    const isToday = isSameDay(dayDate, new Date());
 
     if (!hours.length) {
       return `<h2>${heading}</h2><p>No hourly forecast available.</p>`;
@@ -448,7 +490,7 @@
       </div>
       <div class="hourly-grid">
         <div class="hourly-row-label"></div>
-        <div class="hourly-chart-cell">${buildHourlyChartSvg(hours)}</div>
+        <div class="hourly-chart-cell">${buildHourlyChartSvg(hours, isToday)}</div>
 
         <div class="hourly-row-label">Hour</div>
         ${buildHourlyAxisRow(hours, (h) => formatHourLabel(h.time))}
