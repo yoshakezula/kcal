@@ -344,14 +344,16 @@ needs no extra configuration on the Pi.
 ### Auto-deploy changes pushed from your dev machine
 
 `update.sh` (in this repo) checks GitHub for new commits and, if there are
-any, pulls and restarts `kcal.service`. Run it on a schedule with cron so the
-Pi picks up whatever you push without any manual step:
+any, pulls, restarts `kcal.service`, and restarts `getty@tty1.service` so the
+kiosk view itself refreshes too (not just the backend). Run it on a schedule
+with cron so the Pi picks up whatever you push without any manual step:
 
-1. **Let the service user restart it without a password prompt** (cron runs
-   non-interactively, so `sudo systemctl restart` needs to not ask for one).
-   Run `sudo visudo -f /etc/sudoers.d/kcal-restart` and add:
+1. **Let the service user restart both services without a password prompt**
+   (cron runs non-interactively, so `sudo systemctl restart` needs to not ask
+   for one). Run `sudo visudo -f /etc/sudoers.d/kcal-restart` and add:
    ```
    username ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart kcal.service
+   username ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart getty@tty1.service
    ```
 2. **Make the script executable**:
    ```
@@ -364,7 +366,7 @@ Pi picks up whatever you push without any manual step:
    ```
 
 Push to `main` from your dev machine as usual — within one interval, the Pi
-pulls the change and restarts the service.
+pulls the change, restarts the service, and refreshes the kiosk view.
 
 ### Manually pulling an update and refreshing the kiosk view
 

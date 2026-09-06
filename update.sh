@@ -14,4 +14,5 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     echo "$(date): updating $LOCAL -> $REMOTE"
     git pull origin main
     sudo systemctl restart kcal.service
+    sudo systemctl restart getty@tty1.service
 fi
