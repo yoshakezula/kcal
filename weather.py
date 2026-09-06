@@ -24,7 +24,7 @@ _geocode_cache_zip = None
 # they share a single cache.
 _FORECAST_TTL = datetime.timedelta(minutes=30)
 _forecast_cache = None
-_hourly_cache = None  # {date: [{time, temp, humidity, precipProbability}, ...]}
+_hourly_cache = None  # {date: [{time, temp, humidity, precipProbability, precipAmount, cloudCover}, ...]}
 _forecast_cache_at = None
 _forecast_cache_zip = None
 
@@ -117,8 +117,9 @@ def _ensure_forecast_cache():
             "latitude": location["latitude"],
             "longitude": location["longitude"],
             "daily": "temperature_2m_max,temperature_2m_min,weather_code",
-            "hourly": "temperature_2m,relative_humidity_2m,precipitation_probability",
+            "hourly": "temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,cloud_cover",
             "temperature_unit": "fahrenheit",
+            "precipitation_unit": "inch",
             "timezone": "auto",
             "forecast_days": 7,
         },
@@ -138,6 +139,8 @@ def _ensure_forecast_cache():
     hourly_temps = hourly.get("temperature_2m", [])
     hourly_humidity = hourly.get("relative_humidity_2m", [])
     hourly_precip = hourly.get("precipitation_probability", [])
+    hourly_precip_amount = hourly.get("precipitation", [])
+    hourly_clouds = hourly.get("cloud_cover", [])
 
     hourly_by_date = {}
     humidity_by_date = {}
@@ -150,6 +153,8 @@ def _ensure_forecast_cache():
                 "temp": round(hourly_temps[i]) if i < len(hourly_temps) and hourly_temps[i] is not None else None,
                 "humidity": humidity,
                 "precipProbability": hourly_precip[i] if i < len(hourly_precip) else None,
+                "precipAmount": hourly_precip_amount[i] if i < len(hourly_precip_amount) else None,
+                "cloudCover": hourly_clouds[i] if i < len(hourly_clouds) else None,
             }
         )
         if humidity is not None:
@@ -185,8 +190,8 @@ def get_forecast():
 
 def get_hourly(date):
     """Return the hourly breakdown for one date (within the cached 7-day
-    window) as [{time, temp, humidity, precipProbability}, ...], or None if
-    there's no data for that date."""
+    window) as [{time, temp, humidity, precipProbability, precipAmount,
+    cloudCover}, ...], or None if there's no data for that date."""
     _ensure_forecast_cache()
     if _hourly_cache is None:
         return None

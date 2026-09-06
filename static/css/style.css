@@ -11,6 +11,7 @@
   --temp-color: #eb6834;
   --humidity-color: #2a78d6;
   --precip-color: #1a9e8f;
+  --cloud-color: #8a8f96;
 }
 
 * {
@@ -230,6 +231,11 @@ button, a {
 
 .forecast-swatch-humidity {
   background: var(--humidity-color);
+}
+
+.forecast-swatch-cloud {
+  background: var(--cloud-color);
+  opacity: 0.45;
 }
 
 .forecast-days {
@@ -865,6 +871,11 @@ button, a {
   width: 100%;
   height: 170px;
   display: block;
+}
+
+.hourly-cloud-bar {
+  fill: var(--cloud-color);
+  opacity: 0.18;
 }
 
 .hourly-gridline {

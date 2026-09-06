@@ -324,12 +324,14 @@
   const HOURLY_PAD_BOTTOM = 8;
   const HOURLY_PAD_LEFT_PCT = ((HOURLY_PAD_LEFT / HOURLY_CHART_W) * 100).toFixed(2);
   const HOURLY_PAD_RIGHT_PCT = ((HOURLY_PAD_RIGHT / HOURLY_CHART_W) * 100).toFixed(2);
-  const HUMIDITY_SHADE_RGB = "42,120,214"; // matches --humidity-color
   const PRECIP_SHADE_RGB = "26,158,143"; // matches --precip-color
+  const PRECIP_AMOUNT_MIN_PROBABILITY = 40; // below this, an hour's amount isn't worth showing
 
   // Two series, two scales: temperature reads off the left axis, humidity
   // (always 0-100%) off the right - each drawn in its own color so the
-  // axis a value belongs to is never ambiguous.
+  // axis a value belongs to is never ambiguous. Cloud cover shares the
+  // right-hand percentage axis but is drawn as faint gray bars behind both
+  // lines, so it reads as background context rather than a third series.
   function buildHourlyChartSvg(hours, showNow) {
     const temps = hours.map((h) => h.temp).filter((t) => t != null);
     if (!temps.length) {
@@ -355,6 +357,24 @@
       .map((h, i) => (h.humidity != null ? `${xAt(i).toFixed(1)},${yHumAt(h.humidity).toFixed(1)}` : null))
       .filter(Boolean)
       .join(" ");
+
+    // Bars are centered on their hour and clipped to the plot area, so the
+    // first and last ones don't spill past the axes.
+    const plotLeft = HOURLY_PAD_LEFT;
+    const plotRight = HOURLY_CHART_W - HOURLY_PAD_RIGHT;
+    const plotBottom = HOURLY_PAD_TOP + plotH;
+    const barWidth = (n <= 1 ? plotW : plotW / (n - 1)) * 0.8;
+    const cloudBarsHtml = hours
+      .map((h, i) => {
+        if (h.cloudCover == null) return "";
+        const y = yHumAt(h.cloudCover);
+        const height = plotBottom - y;
+        if (height <= 0) return "";
+        const x = Math.max(plotLeft, xAt(i) - barWidth / 2);
+        const w = Math.min(plotRight, xAt(i) + barWidth / 2) - x;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${height.toFixed(1)}" class="hourly-cloud-bar" />`;
+      })
+      .join("");
 
     const tempGridHtml = [tempMax, (tempMax + tempMin) / 2, tempMin]
       .map((v) => {
@@ -423,6 +443,7 @@
 
     return `
       <svg class="hourly-svg" viewBox="0 0 ${HOURLY_CHART_W} ${HOURLY_CHART_H}" preserveAspectRatio="none">
+        ${cloudBarsHtml}
         ${tempGridHtml}
         ${humGridHtml}
         <polyline points="${humPoints}" class="hourly-line hourly-line-humidity" fill="none" />
@@ -482,11 +503,24 @@
       return `<h2>${heading}</h2><p>No hourly forecast available.</p>`;
     }
 
+    // The amount only says something useful when rain is actually likely, so
+    // it's blank below the threshold - and the whole row is dropped on days
+    // where no hour clears it.
+    const isLikelyRain = (h) => h.precipProbability != null && h.precipProbability > PRECIP_AMOUNT_MIN_PROBABILITY;
+    const amountRowHtml = hours.some((h) => isLikelyRain(h) && h.precipAmount != null)
+      ? `
+        <div class="hourly-row-label">Amount</div>
+        ${buildHourlyAxisRow(hours, (h) =>
+          isLikelyRain(h) && h.precipAmount != null ? h.precipAmount.toFixed(1) + '"' : "–"
+        )}`
+      : "";
+
     return `
       <h2>${heading}</h2>
       <div class="hourly-legend">
         <span class="hourly-legend-item"><span class="forecast-swatch forecast-swatch-temp"></span>Temp &deg;F</span>
         <span class="hourly-legend-item"><span class="forecast-swatch forecast-swatch-humidity"></span>Humidity %</span>
+        <span class="hourly-legend-item"><span class="forecast-swatch forecast-swatch-cloud"></span>Cloud %</span>
       </div>
       <div class="hourly-grid">
         <div class="hourly-row-label"></div>
@@ -495,19 +529,13 @@
         <div class="hourly-row-label">Hour</div>
         ${buildHourlyAxisRow(hours, (h) => formatHourLabel(h.time))}
 
-        <div class="hourly-row-label">Humidity</div>
-        ${buildHourlyAxisRow(
-          hours,
-          (h) => (h.humidity != null ? h.humidity + "%" : "–"),
-          (h) => absoluteScaleShade(h.humidity, HUMIDITY_SHADE_RGB)
-        )}
-
         <div class="hourly-row-label">Rain</div>
         ${buildHourlyAxisRow(
           hours,
           (h) => (h.precipProbability != null ? h.precipProbability + "%" : "–"),
           (h) => absoluteScaleShade(h.precipProbability, PRECIP_SHADE_RGB)
         )}
+        ${amountRowHtml}
       </div>`;
   }
 
