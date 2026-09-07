@@ -1058,6 +1058,12 @@
 
   const CONFETTI_COLORS = ["#f94144", "#f3722c", "#f8961e", "#f9c74f", "#90be6d", "#43aa8b", "#577590", "#c8b6ff"];
   const CONFETTI_DURATION_MS = 4000;
+  // Particle speeds below are "per 60fps frame", so every frame scales its
+  // motion by how long that frame actually took. The kiosk Pi draws far fewer
+  // frames per second than a desktop; without this the confetti crawls and is
+  // still mid-screen when the wall-clock duration cuts it off.
+  const CONFETTI_FRAME_MS = 1000 / 60;
+  const CONFETTI_MAX_STEP = 4;  // cap the catch-up after a long stall
   let confettiRafId = null;
 
   function fireConfetti() {
@@ -1084,24 +1090,28 @@
     }
 
     const startTime = performance.now();
+    let lastTime = startTime;
     if (confettiRafId !== null) cancelAnimationFrame(confettiRafId);
 
     function step(now) {
       const elapsed = now - startTime;
+      const frames = Math.min((now - lastTime) / CONFETTI_FRAME_MS, CONFETTI_MAX_STEP);
+      lastTime = now;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       particles.forEach((p) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.rotation += p.rotationSpeed;
+        p.x += p.vx * frames;
+        p.y += p.vy * frames;
+        p.rotation += p.rotationSpeed * frames;
 
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate((p.rotation * Math.PI) / 180);
+        const angle = (p.rotation * Math.PI) / 180;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        ctx.setTransform(cos, sin, -sin, cos, p.x, p.y);
         ctx.fillStyle = p.color;
         ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
-        ctx.restore();
       });
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
 
       if (elapsed < CONFETTI_DURATION_MS) {
         confettiRafId = requestAnimationFrame(step);
