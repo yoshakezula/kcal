@@ -1,6 +1,7 @@
 """Thin wrapper around the Google Tasks API: list task lists, fetch the
 tasks within one, and toggle a task's completion status."""
 
+import datetime as dt
 import re
 
 from googleapiclient.discovery import build
@@ -66,11 +67,44 @@ def _normalize_task(raw_task, points_enabled=False):
     }
 
 
+def _today_start():
+    """Midnight at the start of today, in the host machine's local timezone."""
+    return dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _parse_timestamp(value):
+    """Parse an RFC3339 timestamp from the API, or None if it can't be read."""
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _is_stale_completion(raw_task, today_start):
+    """True for a task that was completed on an earlier day, so it should
+    drop out of view once midnight passes.
+
+    Recurring tasks are unaffected: Google Tasks replaces a completed
+    occurrence with a fresh, incomplete one for the next date, so what the
+    API returns for them is either still incomplete or completed today."""
+    if raw_task.get("status") != "completed":
+        return False
+    completed_at = _parse_timestamp(raw_task.get("completed"))
+    if completed_at is None:
+        # No usable completion time, so don't guess at hiding the task.
+        return False
+    return completed_at < today_start
+
+
 def get_tasks(task_list_id, points_enabled=False):
-    """Fetch every task in a list (including completed ones, so a checked
-    task can be un-checked), incomplete tasks first. The hidden points
+    """Fetch the tasks in a list, incomplete ones first. Tasks completed
+    earlier today are included so a checked task can be un-checked, but
+    those completed on an earlier day are left out. The hidden points
     bookkeeping task, if any, is never included."""
     service = _service()
+    today_start = _today_start()
     tasks = []
     page_token = None
     while True:
@@ -81,6 +115,8 @@ def get_tasks(task_list_id, points_enabled=False):
         )
         for raw_task in response.get("items", []):
             if _is_total_points_task(raw_task.get("title")):
+                continue
+            if _is_stale_completion(raw_task, today_start):
                 continue
             tasks.append(_normalize_task(raw_task, points_enabled=points_enabled))
         page_token = response.get("nextPageToken")
