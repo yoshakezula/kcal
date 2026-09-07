@@ -76,15 +76,51 @@
     </div>
   </div>
 
-  <div id="disconnectedScreen" class="disconnected-screen hidden">
-    <h2>Calendar disconnected</h2>
-    <p>Run <code>python authorize.py</code> on the host machine, then reload.</p>
-    <button id="retryBtn">Retry</button>
+  <div
+    id="authModal"
+    class="auth-modal hidden"
+    role="alertdialog"
+    aria-labelledby="authModalTitle"
+    aria-describedby="authModalReason"
+  >
+    <div class="auth-modal-backdrop"></div>
+    <div class="auth-modal-panel">
+      <div class="auth-modal-icon" aria-hidden="true">!</div>
+      <h2 id="authModalTitle">Calendar disconnected</h2>
+      <p id="authModalReason" class="auth-modal-reason">
+        Google turned down the saved sign-in.
+      </p>
+      <p class="auth-modal-fix">
+        Run <code>python authorize.py</code> on the host machine, then retry.
+      </p>
+      <div class="auth-modal-actions">
+        <button id="retryBtn" class="auth-modal-retry">Retry</button>
+        <button id="authDismissBtn" class="auth-modal-dismiss">Dismiss</button>
+      </div>
+    </div>
   </div>
 
   <canvas id="confettiCanvas" class="confetti-canvas hidden"></canvas>
 
   <div id="sleepScreen" class="sleep-screen"></div>
+
+  {% if saved %}<div class="toast" id="savedToast" role="status">Saved</div>{% endif %}
+
+  <script>
+    // Saving in Settings redirects here with ?saved=1. Confirm the write,
+    // then strip the param so a reload doesn't re-toast.
+    (function () {
+      var toast = document.getElementById("savedToast");
+      if (!toast) return;
+      history.replaceState(null, "", window.location.pathname);
+      setTimeout(function () {
+        toast.classList.add("leaving");
+        toast.addEventListener("transitionend", function () {
+          toast.remove();
+        });
+      }, 2200);
+    })();
+  </script>
 
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

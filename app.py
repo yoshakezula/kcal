@@ -48,14 +48,14 @@ def index():
         show_cursor=SHOW_CURSOR,
         sleep_enabled=get_sleep_enabled(),
         view=get_view(),
+        saved=request.args.get("saved"),
     )
 
 
-def _saved_redirect(card):
-    """Redirect back to Settings, flagging which card was just written so
-    the page can confirm the save (and scroll back to it) instead of
-    silently re-rendering an identical-looking form."""
-    return redirect(url_for("settings", saved=card, _anchor=card))
+def _saved_redirect():
+    """Saving anything in Settings drops you back on the calendar, where the
+    change is visible; the flag just tells that page to confirm the write."""
+    return redirect(url_for("index", saved=1))
 
 
 def _settings_context(zip_code=None, zip_error=None):
@@ -84,7 +84,6 @@ def _settings_context(zip_code=None, zip_error=None):
         "ui_scale": get_ui_scale(),
         "show_cursor": SHOW_CURSOR,
         "sleep_enabled": get_sleep_enabled(),
-        "saved": request.args.get("saved"),
     }
 
 
@@ -93,7 +92,7 @@ def settings():
     if request.method == "POST":
         selected_ids = request.form.getlist("calendar_id")
         set_calendar_ids(selected_ids or ["primary"])
-        return _saved_redirect("calendars")
+        return _saved_redirect()
 
     return render_template("settings.html", **_settings_context())
 
@@ -118,25 +117,25 @@ def settings_location():
         return render_template("settings.html", **_settings_context(zip_code=zip_code, zip_error=zip_error))
 
     set_zip_code(zip_code)
-    return _saved_redirect("location")
+    return _saved_redirect()
 
 
 @app.route("/settings/tasks", methods=["POST"])
 def settings_tasks():
     set_task_list_ids(request.form.getlist("task_list_id"))
-    return _saved_redirect("tasks")
+    return _saved_redirect()
 
 
 @app.route("/settings/points", methods=["POST"])
 def settings_points():
     set_points_tracking(bool(request.form.get("points_tracking")))
-    return _saved_redirect("points")
+    return _saved_redirect()
 
 
 @app.route("/settings/sleep", methods=["POST"])
 def settings_sleep():
     set_sleep_enabled(bool(request.form.get("sleep_enabled")))
-    return _saved_redirect("sleep")
+    return _saved_redirect()
 
 
 @app.route("/settings/display", methods=["POST"])
@@ -146,7 +145,7 @@ def settings_display():
     except ValueError:
         scale = 1.0
     set_ui_scale(scale)
-    return _saved_redirect("display")
+    return _saved_redirect()
 
 
 @app.route("/api/weather")

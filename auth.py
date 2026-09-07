@@ -8,6 +8,7 @@ expired, and persist the refreshed token back to disk.
 
 import os
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
@@ -25,18 +26,26 @@ class NotAuthorized(Exception):
 
 def get_credentials():
     if not os.path.exists(TOKEN_PATH):
-        raise NotAuthorized("No token.json found. Run: python authorize.py")
+        raise NotAuthorized("No token.json found -- this machine isn't authorized yet.")
 
     creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
 
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            # Google revokes refresh tokens (an app still in "Testing" expires
+            # them after a week). That's the same "go re-authorize" situation
+            # as a missing token, so raise it as such instead of letting a
+            # generic error surface to the frontend as a silent empty calendar.
+            # Every caller pairs this with its own "run authorize.py", so the
+            # message stays purely diagnostic.
+            detail = e.args[0] if e.args else e
+            raise NotAuthorized(f"Google rejected the saved sign-in: {detail}") from e
         with open(TOKEN_PATH, "w", encoding="utf-8") as f:
             f.write(creds.to_json())
 
     if not creds or not creds.valid:
-        raise NotAuthorized(
-            "Stored credentials are invalid or revoked. Run: python authorize.py"
-        )
+        raise NotAuthorized("The saved sign-in is no longer valid.")
 
     return creds

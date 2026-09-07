@@ -9,8 +9,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
 <body class="settings-page {{ 'show-cursor' if show_cursor else '' }}">
-  <div class="settings-header">
+  <div class="settings-topbar">
     <p class="back-link"><a href="{{ url_for('index') }}">&larr; Back to calendar</a></p>
+  </div>
+
+  <div class="settings-header">
     <h1 class="settings-title">Settings</h1>
     <p class="settings-subtitle">Configure what the kiosk display shows.</p>
   </div>
@@ -150,23 +153,5 @@
       <button type="submit" class="save-button">Save</button>
     </form>
   </section>
-
-  {% if saved %}<div class="toast" id="savedToast" role="status">Saved</div>{% endif %}
-
-  <script>
-    // Each settings form posts and redirects back here with ?saved=<card>.
-    // Confirm the write, then strip the param so a reload doesn't re-toast.
-    (function () {
-      var toast = document.getElementById("savedToast");
-      if (!toast) return;
-      history.replaceState(null, "", window.location.pathname + window.location.hash);
-      setTimeout(function () {
-        toast.classList.add("leaving");
-        toast.addEventListener("transitionend", function () {
-          toast.remove();
-        });
-      }, 2200);
-    })();
-  </script>
 </body>
 </html>

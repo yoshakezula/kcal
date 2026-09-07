@@ -84,7 +84,9 @@
     overlayBackdrop: document.getElementById("overlayBackdrop"),
     overlayClose: document.getElementById("overlayClose"),
     overlayBody: document.getElementById("overlayBody"),
-    disconnectedScreen: document.getElementById("disconnectedScreen"),
+    authModal: document.getElementById("authModal"),
+    authModalReason: document.getElementById("authModalReason"),
+    authDismissBtn: document.getElementById("authDismissBtn"),
     retryBtn: document.getElementById("retryBtn"),
     confettiCanvas: document.getElementById("confettiCanvas"),
     sleepScreen: document.getElementById("sleepScreen"),
@@ -254,7 +256,7 @@
       }
 
       if (response.status === 401) {
-        showDisconnected(true);
+        showDisconnected(true, await errorMessage(response));
         return;
       }
 
@@ -297,8 +299,33 @@
     );
   }
 
-  function showDisconnected(show) {
-    el.disconnectedScreen.classList.toggle("hidden", !show);
+  // The server's own explanation of a 401, so the modal can say which way
+  // the sign-in failed rather than only that it did.
+  async function errorMessage(response) {
+    try {
+      const data = await response.json();
+      return data && data.message ? data.message : "";
+    } catch (err) {
+      return "";
+    }
+  }
+
+  // Dismissing the modal has to outlive one render: /api/events is re-polled
+  // every few minutes, and a modal that popped back up on each failed poll
+  // would be unusable. A successful load clears it, so a later disconnect
+  // still speaks up.
+  let authModalDismissed = false;
+
+  function showDisconnected(show, reason) {
+    if (!show) {
+      authModalDismissed = false;
+      el.authModal.classList.add("hidden");
+      return;
+    }
+    el.authModalReason.textContent =
+      reason || "Google turned down the saved sign-in.";
+    if (authModalDismissed) return;
+    el.authModal.classList.remove("hidden");
   }
 
   // ---------- Weather forecast strip ----------
@@ -1318,8 +1345,20 @@
   el.week2Btn.addEventListener("click", () => setView("week2"));
   el.week3Btn.addEventListener("click", () => setView("week3"));
   el.listBtn.addEventListener("click", () => setView("list"));
-  el.refreshBtn.addEventListener("click", loadEvents);
-  el.retryBtn.addEventListener("click", loadEvents);
+  // Both buttons mean "try again", so either one re-arms a dismissed modal:
+  // otherwise dismissing it once would hide every later failure too.
+  function retryLoad() {
+    authModalDismissed = false;
+    loadEvents();
+  }
+
+  el.refreshBtn.addEventListener("click", retryLoad);
+  el.retryBtn.addEventListener("click", retryLoad);
+
+  el.authDismissBtn.addEventListener("click", () => {
+    authModalDismissed = true;
+    el.authModal.classList.add("hidden");
+  });
 
   // ---------- Swipe navigation ----------
 
