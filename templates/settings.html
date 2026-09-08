@@ -132,6 +132,22 @@
           Start a new log sheet
         </button>
       </form>
+      <p class="settings-hint">
+        Or point this kiosk at a log sheet it already made — on another
+        machine, say, so both write to the same history. Paste the sheet's
+        link or ID.
+      </p>
+      <form method="post" action="{{ url_for('settings_points_log') }}" class="location-form">
+        <input
+          type="text"
+          name="spreadsheet"
+          value=""
+          placeholder="https://docs.google.com/spreadsheets/d/…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button type="submit" name="use_existing" value="1" class="save-button">Use this sheet</button>
+      </form>
     {% else %}
       <p class="settings-hint">
         The kiosk can only write to a sheet it created itself — that's what
@@ -142,6 +158,22 @@
         <button type="submit" name="create" value="1" class="save-button">
           Create the log sheet
         </button>
+      </form>
+      <p class="settings-hint">
+        Or point this kiosk at a log sheet it already made — on another
+        machine, say, so both write to the same history. Paste the sheet's
+        link or ID.
+      </p>
+      <form method="post" action="{{ url_for('settings_points_log') }}" class="location-form">
+        <input
+          type="text"
+          name="spreadsheet"
+          value=""
+          placeholder="https://docs.google.com/spreadsheets/d/…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button type="submit" name="use_existing" value="1" class="save-button">Use this sheet</button>
       </form>
     {% endif %}
   </section>

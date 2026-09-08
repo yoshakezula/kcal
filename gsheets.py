@@ -192,6 +192,47 @@ def create_log(folder_id=""):
     return folder_id, spreadsheet_id, created.get("spreadsheetUrl") or log_url(spreadsheet_id)
 
 
+# A spreadsheet URL looks like .../spreadsheets/d/<id>/edit#gid=0; the ID
+# itself is the long opaque part, which is all the API wants.
+SPREADSHEET_URL_ID_RE = re.compile(r"/spreadsheets/d/([A-Za-z0-9_-]+)")
+SPREADSHEET_ID_RE = re.compile(r"^[A-Za-z0-9_-]{20,}$")
+
+
+def parse_spreadsheet_id(text):
+    """Pull a spreadsheet ID out of a pasted URL, or accept a bare ID.
+    Returns None if there's nothing that looks like one."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    match = SPREADSHEET_URL_ID_RE.search(text)
+    if match:
+        return match.group(1)
+    return text if SPREADSHEET_ID_RE.match(text) else None
+
+
+def verify_log(spreadsheet_id):
+    """Confirm the app can actually reach this spreadsheet, returning its
+    title. Raises LogUnavailable when it can't -- which for a well-formed ID
+    almost always means the sheet wasn't created by this app, so the
+    drive.file scope grants no access to it."""
+    sheets = _sheets()
+    try:
+        meta = (
+            sheets.spreadsheets()
+            .get(spreadsheetId=spreadsheet_id, fields="properties.title")
+            .execute()
+        )
+    except HttpError as e:
+        _check_scope(e)
+        if _unavailable(e):
+            raise LogUnavailable(
+                "The kiosk can't open that spreadsheet. It can only reach sheets it "
+                "created itself, so use one this app made -- on this machine or another."
+            ) from e
+        raise
+    return meta.get("properties", {}).get("title") or SPREADSHEET_TITLE
+
+
 def log_url(spreadsheet_id):
     return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
 
@@ -303,7 +344,20 @@ def resolve_tab(spreadsheet_id, task_list_id, list_title, known_tabs):
     if known_id in by_id:
         return by_id[known_id], known_id, False
 
-    wanted = _unique_title(_tab_title(list_title), set(by_id.values()))
+    wanted = _tab_title(list_title)
+
+    # Adopting a log another machine created: its tabs are already named after
+    # the task lists, so claim the matching one rather than adding a duplicate
+    # beside it. A tab already mapped to a different list is off limits --
+    # that's a second list with the same name, which needs its own tab.
+    claimed = set(known_tabs.values())
+    by_title = {title: sheet_id for sheet_id, title in by_id.items()}
+    if wanted in by_title and by_title[wanted] not in claimed:
+        sheet_id = by_title[wanted]
+        _format_new_tab(sheets, spreadsheet_id, sheet_id, wanted)
+        return wanted, sheet_id, True
+
+    wanted = _unique_title(wanted, set(by_id.values()))
 
     # A brand-new spreadsheet arrives with one empty default tab and nothing
     # mapped to it; claim that instead of leaving it behind.

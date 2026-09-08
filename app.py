@@ -151,6 +151,31 @@ def settings_points_log():
     Creating is a button rather than a paste-the-URL field on purpose: the
     app holds only per-file Drive access, so it can write to a sheet it made
     and to nothing else (see gsheets)."""
+    if request.form.get("use_existing"):
+        spreadsheet_id = gsheets.parse_spreadsheet_id(request.form.get("spreadsheet"))
+        if not spreadsheet_id:
+            return render_template(
+                "settings.html",
+                **_settings_context(points_log_error="That doesn't look like a Google Sheets link or ID."),
+            )
+        try:
+            gsheets.verify_log(spreadsheet_id)
+        except (NotAuthorized, gsheets.LogUnavailable) as e:
+            return render_template("settings.html", **_settings_context(points_log_error=str(e)))
+        except Exception as e:
+            return render_template(
+                "settings.html",
+                **_settings_context(points_log_error=f"Couldn't open that sheet: {e}"),
+            )
+        # Keep the folder as-is; it only matters when creating. Switching
+        # sheets clears the per-list tab map, since tab IDs belong to the
+        # spreadsheet they came from -- carrying them over could point a
+        # list at an unrelated tab that happens to share an ID.
+        folder_id, _ = get_points_log_ids()
+        set_points_log_ids(folder_id, spreadsheet_id)
+        set_points_log_enabled(True)
+        return _saved_redirect()
+
     if request.form.get("create"):
         folder_id, _ = get_points_log_ids()
         try:

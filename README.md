@@ -143,9 +143,16 @@ the total.
 
 Notes:
 
-- The kiosk can only write to a sheet **it created**, which is what keeps
-  `drive.file` from granting it the rest of your Drive. That's why there's a
-  button instead of a place to paste a URL.
+- The kiosk can only reach a sheet **it created**, which is what keeps
+  `drive.file` from granting it the rest of your Drive. So the sheet has to
+  be made by the button; pasting the link of a sheet you made by hand won't
+  work, and Settings will say so.
+- Each machine keeps its own `config.json`, so a second one (your dev
+  machine, say) starts with no sheet and would create a *second* log. To
+  share one history instead, paste the first sheet's link into **Settings →
+  Points Log** and press **Use this sheet** — that works because the app
+  created it, whichever machine did the creating. Tabs already named after
+  your task lists get picked up rather than duplicated.
 - Renaming the sheet, renaming a tab, or moving it to another folder is all
   fine — it's tracked by ID. Deleting it isn't: create a new one from the
   same screen.
@@ -155,8 +162,8 @@ Notes:
   the failure is only logged to the console — that completion won't make it
   into the sheet.
 - The sheet ID lives in `config.json`, which isn't in git. On a rebuilt Pi,
-  create a new log sheet, or copy `config.json` across to keep appending to
-  the old one.
+  paste the old sheet's link back in (or copy `config.json` across) to keep
+  appending to the same history.
 
 ## 6. Run it full-screen on the kiosk computer
 
