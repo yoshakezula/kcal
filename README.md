@@ -133,13 +133,15 @@ This uses [Open-Meteo](https://open-meteo.com/), which needs no API key.
 With points tracking on, the Tasks popup keeps a running total per list in a
 hidden `Total Points:` task. Tasks completed on an earlier day drop out of
 the popup at midnight, so if you want a permanent history, turn on the
-points log: **Settings → Points Log → Create the log sheet**.
+points log: **Settings → Points Log → Set up the log sheet**.
 
-That creates a spreadsheet called **Kcal Points Tracking** in a **kcal**
-folder in your Google Drive, with one tab per task list — task name, points,
-when it was checked, and the running total after that check. Un-checking a
-task appends a row that subtracts it, so the Points column always sums to
-the total.
+That uses a spreadsheet called **Kcal Points Tracking** in a **kcal** folder
+in your Google Drive, creating it if the app hasn't already — so a second
+machine joins the same history with the same single tap, no typing, which
+matters on a kiosk with no keyboard. Each sheet holds one tab per task
+list: task name, points, when it was checked, and the running total after
+that check. Un-checking a task appends a row that subtracts it, so the
+Points column always sums to the total.
 
 Notes:
 
@@ -147,12 +149,16 @@ Notes:
   `drive.file` from granting it the rest of your Drive. So the sheet has to
   be made by the button; pasting the link of a sheet you made by hand won't
   work, and Settings will say so.
-- Each machine keeps its own `config.json`, so a second one (your dev
-  machine, say) starts with no sheet and would create a *second* log. To
-  share one history instead, paste the first sheet's link into **Settings →
-  Points Log** and press **Use this sheet** — that works because the app
-  created it, whichever machine did the creating. Tabs already named after
-  your task lists get picked up rather than duplicated.
+- Each machine keeps its own `config.json`, so a second one starts with no
+  sheet — but **Set up the log sheet** finds the existing one rather than
+  making another, and picks up tabs already named after your task lists
+  instead of duplicating them. Paste a link only to choose a *specific*
+  sheet: one that was renamed, or one of several.
+- If you do end up with more than one **Kcal Points Tracking**, setup picks
+  the oldest so that every machine agrees on the same one. Trash the spare
+  to remove the ambiguity — trashed sheets are skipped.
+- **Start a new log sheet** always creates a fresh one, even when a log
+  already exists. That's the "start over" button, not the setup one.
 - Renaming the sheet, renaming a tab, or moving it to another folder is all
   fine — it's tracked by ID. Deleting it isn't: create a new one from the
   same screen.

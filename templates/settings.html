@@ -133,9 +133,8 @@
         </button>
       </form>
       <p class="settings-hint">
-        Or point this kiosk at a log sheet it already made — on another
-        machine, say, so both write to the same history. Paste the sheet's
-        link or ID.
+        Only needed if the sheet was renamed, or you keep more than one:
+        paste its link or ID to pick that exact sheet.
       </p>
       <form method="post" action="{{ url_for('settings_points_log') }}" class="location-form">
         <input
@@ -150,19 +149,18 @@
       </form>
     {% else %}
       <p class="settings-hint">
-        The kiosk can only write to a sheet it created itself — that's what
-        keeps it from having access to the rest of your Drive — so create it
-        here rather than pointing at an existing one.
+        One tap: this picks up the "Kcal Points Tracking" sheet in your
+        <em>kcal</em> folder if the app already made one — so a second kiosk
+        joins the same history without any typing — and creates it otherwise.
       </p>
       <form method="post" action="{{ url_for('settings_points_log') }}">
-        <button type="submit" name="create" value="1" class="save-button">
-          Create the log sheet
+        <button type="submit" name="setup" value="1" class="save-button">
+          Set up the log sheet
         </button>
       </form>
       <p class="settings-hint">
-        Or point this kiosk at a log sheet it already made — on another
-        machine, say, so both write to the same history. Paste the sheet's
-        link or ID.
+        Only needed if the sheet was renamed, or you keep more than one:
+        paste its link or ID to pick that exact sheet.
       </p>
       <form method="post" action="{{ url_for('settings_points_log') }}" class="location-form">
         <input

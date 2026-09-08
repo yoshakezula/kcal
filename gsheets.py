@@ -26,6 +26,7 @@ from auth import NotAuthorized, get_credentials
 FOLDER_NAME = "kcal"
 SPREADSHEET_TITLE = "Kcal Points Tracking"
 FOLDER_MIME = "application/vnd.google-apps.folder"
+SPREADSHEET_MIME = "application/vnd.google-apps.spreadsheet"
 HEADERS = ("When", "Task", "Points", "Total")
 
 # Characters Sheets rejects in a tab title, plus its 100-character limit.
@@ -143,6 +144,55 @@ def _ensure_folder(drive, folder_id):
         .execute()
     )
     return created["id"]
+
+
+def _find_existing_log(drive, folder_id=None):
+    """Look for a log spreadsheet this app made earlier, preferring one
+    inside the "kcal" folder and falling back to the name alone in case it
+    was moved out. Under drive.file the search only ever sees the app's own
+    files, so this can't stumble onto an unrelated sheet of the same name.
+
+    Oldest first, so every machine that goes looking independently settles
+    on the same sheet rather than each adopting a different duplicate."""
+    queries = []
+    if folder_id:
+        queries.append(
+            f"mimeType='{SPREADSHEET_MIME}' and name='{SPREADSHEET_TITLE}' "
+            f"and trashed=false and '{folder_id}' in parents"
+        )
+    queries.append(f"mimeType='{SPREADSHEET_MIME}' and name='{SPREADSHEET_TITLE}' and trashed=false")
+
+    for q in queries:
+        response = (
+            drive.files()
+            .list(q=q, fields="files(id)", orderBy="createdTime", pageSize=1)
+            .execute()
+        )
+        files = response.get("files", [])
+        if files:
+            return files[0]["id"]
+    return None
+
+
+def adopt_or_create_log(folder_id=""):
+    """Return (folder_id, spreadsheet_id, url, adopted) for the log sheet,
+    reusing one this app made before and creating it only when there's none.
+
+    This is what a fresh machine wants: the kiosk has no keyboard, and its
+    config.json is per-machine, so a second one would otherwise have no way
+    to reach the first one's log without someone typing an ID."""
+    drive = _drive()
+    try:
+        existing_folder = _find_existing_folder(drive) if not folder_id else folder_id
+        existing = _find_existing_log(drive, existing_folder)
+    except HttpError as e:
+        _check_scope(e)
+        raise
+    if existing:
+        return existing_folder or "", existing, log_url(existing), True
+
+    folder_id, spreadsheet_id, url = create_log(folder_id)
+    return folder_id, spreadsheet_id, url, False
 
 
 def create_log(folder_id=""):

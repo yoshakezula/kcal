@@ -176,10 +176,17 @@ def settings_points_log():
         set_points_log_enabled(True)
         return _saved_redirect()
 
-    if request.form.get("create"):
+    if request.form.get("setup") or request.form.get("create"):
+        # "setup" reuses a log this app made before and creates one only when
+        # there is none, so a keyboard-less kiosk needs nothing but the one
+        # tap. "create" is the explicit "start over with a fresh sheet".
+        force_new = bool(request.form.get("create"))
         folder_id, _ = get_points_log_ids()
         try:
-            folder_id, spreadsheet_id, _ = gsheets.create_log(folder_id)
+            if force_new:
+                folder_id, spreadsheet_id, _ = gsheets.create_log(folder_id)
+            else:
+                folder_id, spreadsheet_id, _, _ = gsheets.adopt_or_create_log(folder_id)
         except NotAuthorized as e:
             return render_template("settings.html", **_settings_context(points_log_error=str(e)))
         except Exception as e:
