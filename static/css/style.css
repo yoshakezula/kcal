@@ -1234,6 +1234,18 @@ body.compact-header .view-toggle-btn {
   background: var(--surface-2);
 }
 
+/* A row waiting on the server ignores further taps (see toggleTask), so it
+   says so rather than looking dead. The check itself keeps the state it was
+   optimistically given, which is what makes the wait feel instant. */
+.task-pending .task-check {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.task-pending .task-check:hover {
+  background: transparent;
+}
+
 /* The visible circle is a pseudo-element, so the tappable button can be
    a full 44px while the mark itself stays visually small. */
 .task-check::before {

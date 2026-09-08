@@ -15,6 +15,11 @@ from google.oauth2.credentials import Credentials
 SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/tasks",
+    # Per-file Drive access, for the points log spreadsheet. This grants the
+    # app nothing but the folder and sheet it creates itself -- it cannot see
+    # anything else in Drive, which is why the log sheet has to be created
+    # from Settings rather than pointed at an existing one.
+    "https://www.googleapis.com/auth/drive.file",
 ]
 TOKEN_PATH = os.path.join(os.path.dirname(__file__), "token.json")
 

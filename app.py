@@ -4,11 +4,15 @@ import platform
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 import gcal
+import gsheets
 import gtasks
 import weather
 from auth import NotAuthorized
 from config import (
     get_calendar_ids,
+    get_points_log_enabled,
+    get_points_log_ids,
+    get_points_log_tabs,
     get_points_tracking,
     get_sleep_enabled,
     get_task_list_ids,
@@ -16,6 +20,9 @@ from config import (
     get_view,
     get_zip_code,
     set_calendar_ids,
+    set_points_log_enabled,
+    set_points_log_ids,
+    set_points_log_tab,
     set_points_tracking,
     set_sleep_enabled,
     set_task_list_ids,
@@ -58,7 +65,7 @@ def _saved_redirect():
     return redirect(url_for("index", saved=1))
 
 
-def _settings_context(zip_code=None, zip_error=None):
+def _settings_context(zip_code=None, zip_error=None, points_log_error=None):
     try:
         calendars = gcal.list_calendars()
         cal_error = None
@@ -71,6 +78,8 @@ def _settings_context(zip_code=None, zip_error=None):
     except NotAuthorized as e:
         task_lists, task_error = [], str(e)
 
+    _, log_spreadsheet_id = get_points_log_ids()
+
     return {
         "cal_error": cal_error,
         "calendars": calendars,
@@ -81,6 +90,9 @@ def _settings_context(zip_code=None, zip_error=None):
         "task_error": task_error,
         "selected_task_lists": set(get_task_list_ids()),
         "points_tracking": get_points_tracking(),
+        "points_log_enabled": get_points_log_enabled(),
+        "points_log_url": gsheets.log_url(log_spreadsheet_id) if log_spreadsheet_id else "",
+        "points_log_error": points_log_error,
         "ui_scale": get_ui_scale(),
         "show_cursor": SHOW_CURSOR,
         "sleep_enabled": get_sleep_enabled(),
@@ -129,6 +141,32 @@ def settings_tasks():
 @app.route("/settings/points", methods=["POST"])
 def settings_points():
     set_points_tracking(bool(request.form.get("points_tracking")))
+    return _saved_redirect()
+
+
+@app.route("/settings/points-log", methods=["POST"])
+def settings_points_log():
+    """Create the log spreadsheet, or turn logging on and off.
+
+    Creating is a button rather than a paste-the-URL field on purpose: the
+    app holds only per-file Drive access, so it can write to a sheet it made
+    and to nothing else (see gsheets)."""
+    if request.form.get("create"):
+        folder_id, _ = get_points_log_ids()
+        try:
+            folder_id, spreadsheet_id, _ = gsheets.create_log(folder_id)
+        except NotAuthorized as e:
+            return render_template("settings.html", **_settings_context(points_log_error=str(e)))
+        except Exception as e:
+            return render_template(
+                "settings.html",
+                **_settings_context(points_log_error=f"Couldn't create the log sheet: {e}"),
+            )
+        set_points_log_ids(folder_id, spreadsheet_id)
+        set_points_log_enabled(True)
+        return _saved_redirect()
+
+    set_points_log_enabled(bool(request.form.get("points_log_enabled")))
     return _saved_redirect()
 
 
@@ -233,6 +271,39 @@ def api_tasks():
     return jsonify({"tasks": tasks, "pointsEnabled": points_enabled, "totalPoints": total_points})
 
 
+def _log_completion(task_list_id, task, completed, total_points):
+    """Append a row to the points log, or quietly do nothing if logging is
+    off or the sheet is unreachable. Never raises: a failed log must not
+    turn a working task toggle into an error the kiosk shows.
+
+    An un-check logs its own row with the points negated, so the log stays an
+    append-only ledger whose Points column sums to the running total."""
+    if not get_points_log_enabled():
+        return
+
+    _, spreadsheet_id = get_points_log_ids()
+    if not spreadsheet_id:
+        return
+
+    try:
+        list_title = gtasks.get_task_list_title(task_list_id)
+        tab_title, sheet_id, is_new = gsheets.resolve_tab(
+            spreadsheet_id, task_list_id, list_title, get_points_log_tabs()
+        )
+        if is_new:
+            set_points_log_tab(task_list_id, sheet_id)
+
+        points = task.get("points")
+        if points is not None and not completed:
+            points = -points
+
+        gsheets.append_completion(spreadsheet_id, tab_title, task["title"], points, total_points)
+    except gsheets.LogUnavailable as e:
+        app.logger.warning("Points log unavailable: %s", e)
+    except Exception as e:
+        app.logger.warning("Couldn't write to the points log: %s", e)
+
+
 @app.route("/api/tasks/toggle", methods=["POST"])
 def api_tasks_toggle():
     data = request.get_json(silent=True) or {}
@@ -246,13 +317,21 @@ def api_tasks_toggle():
     points_enabled = get_points_tracking()
 
     try:
-        task, total_points = gtasks.set_task_completed(task_list_id, task_id, completed, points_enabled=points_enabled)
+        task, total_points, changed = gtasks.set_task_completed(
+            task_list_id, task_id, completed, points_enabled=points_enabled
+        )
+        if changed:
+            _log_completion(task_list_id, task, completed, total_points)
+        elif points_enabled:
+            # Nothing moved, so the client's optimistic guess was wrong.
+            # Send back the real total for it to correct itself with.
+            total_points = gtasks.get_total_points(task_list_id)
     except NotAuthorized as e:
         return jsonify({"error": "not_authorized", "message": str(e)}), 401
     except Exception as e:
         return jsonify({"error": "unknown", "message": str(e)}), 500
 
-    return jsonify({"task": task, "totalPoints": total_points})
+    return jsonify({"task": task, "totalPoints": total_points, "changed": changed})
 
 
 @app.route("/api/view", methods=["POST"])

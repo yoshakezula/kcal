@@ -33,7 +33,9 @@ setup in Google's own developer console; nothing is shared with anyone else.
 3. **Enable the APIs**: go to
    [APIs & Services → Library](https://console.cloud.google.com/apis/library),
    search for **Google Calendar API**, open it, click **Enable** — then do
-   the same for **Google Tasks API**.
+   the same for **Google Tasks API**. If you want the points log (a history
+   of checked-off tasks in a spreadsheet), also enable **Google Sheets API**
+   and **Google Drive API**.
 4. **Configure the OAuth consent screen**: go to
    [Google Auth Platform → Overview](https://console.cloud.google.com/auth/overview)
    (Google has renamed/reorganized this area recently — it may also show up
@@ -43,9 +45,11 @@ setup in Google's own developer console; nothing is shared with anyone else.
      needed).
    - Fill in the required fields (app name, your email as support/contact
      email). Skip optional fields.
-   - You don't need to add scopes manually — the app requests the
-     read-only calendar scope and the Tasks scope itself the first time you
-     authorize it.
+   - You don't need to add scopes manually — the app requests what it needs
+     the first time you authorize it: the read-only calendar scope, the
+     Tasks scope, and `drive.file`, which grants access only to the files
+     the app itself creates (the points log sheet) and nothing else in your
+     Drive.
    - You do **not** need to submit this for Google's verification — that's
      only required for public-facing apps; this stays in "Testing" mode
      indefinitely, which is fine for personal use.
@@ -94,9 +98,10 @@ access. Credentials are saved to `token.json` and refresh themselves
 automatically after this — you shouldn't need to run this again unless you
 delete `token.json` or revoke access.
 
-If you already had a `token.json` from before Tasks support was added,
-delete it and re-run `python authorize.py` so the new consent screen grants
-the Tasks scope too.
+If you already had a `token.json` from before Tasks or the points log was
+added, delete it and re-run `python authorize.py` so the new consent screen
+grants those scopes too. Settings will tell you when this is the problem
+("This sign-in predates the points log…").
 
 If you see **"Access blocked: has not completed the Google verification
 process"** the first time, just run `python authorize.py` again — this
@@ -123,7 +128,37 @@ Also on the same page, set a **zip code** under Weather Location to control
 the 7-day forecast strip at the top of the kiosk view (defaults to `90008`).
 This uses [Open-Meteo](https://open-meteo.com/), which needs no API key.
 
-## 5. Run it full-screen on the kiosk computer
+## 5. Points log (optional)
+
+With points tracking on, the Tasks popup keeps a running total per list in a
+hidden `Total Points:` task. Tasks completed on an earlier day drop out of
+the popup at midnight, so if you want a permanent history, turn on the
+points log: **Settings → Points Log → Create the log sheet**.
+
+That creates a spreadsheet called **Kcal Points Tracking** in a **kcal**
+folder in your Google Drive, with one tab per task list — task name, points,
+when it was checked, and the running total after that check. Un-checking a
+task appends a row that subtracts it, so the Points column always sums to
+the total.
+
+Notes:
+
+- The kiosk can only write to a sheet **it created**, which is what keeps
+  `drive.file` from granting it the rest of your Drive. That's why there's a
+  button instead of a place to paste a URL.
+- Renaming the sheet, renaming a tab, or moving it to another folder is all
+  fine — it's tracked by ID. Deleting it isn't: create a new one from the
+  same screen.
+- Only completions made **on the kiosk** are logged. Checking a task off in
+  the Google Tasks app won't appear (and doesn't award points either).
+- If the sheet can't be written to, the task still checks off normally and
+  the failure is only logged to the console — that completion won't make it
+  into the sheet.
+- The sheet ID lives in `config.json`, which isn't in git. On a rebuilt Pi,
+  create a new log sheet, or copy `config.json` across to keep appending to
+  the old one.
+
+## 6. Run it full-screen on the kiosk computer
 
 ### Windows
 
@@ -390,7 +425,7 @@ If you don't want to wait for the cron interval, or haven't set up
    sudo systemctl restart getty@tty1.service
    ```
 
-## 6. Access it from other devices on your network
+## 7. Access it from other devices on your network
 
 By default `app.py` binds to `0.0.0.0`, so it's reachable from other devices
 on the same Wi-Fi/LAN (phones, tablets, laptops) — not just the host

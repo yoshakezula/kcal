@@ -100,6 +100,52 @@
     </form>
   </section>
 
+  <section class="settings-card" id="points-log">
+    <h2>Points Log</h2>
+    {% if points_log_error %}
+      <p class="settings-error">{{ points_log_error }}</p>
+    {% endif %}
+    <p class="settings-hint">
+      Keep a permanent history of checked-off tasks in a Google Sheet — one
+      tab per task list, with the task name, points, when it was checked, and
+      the running total. Un-checking a task adds a row that subtracts it.
+    </p>
+    {% if points_log_url %}
+      <p class="settings-hint">
+        Logging to <a href="{{ points_log_url }}" target="_blank" rel="noopener">Kcal Points Tracking</a>,
+        in the "kcal" folder of your Google Drive. Renaming or moving the
+        sheet is fine; the kiosk finds it by ID.
+      </p>
+      <form method="post" action="{{ url_for('settings_points_log') }}" class="points-form">
+        <label class="calendar-option">
+          <input type="checkbox" name="points_log_enabled" {% if points_log_enabled %}checked{% endif %} />
+          <span class="calendar-name">Log completed tasks to the sheet</span>
+        </label>
+        <button type="submit" class="save-button">Save</button>
+      </form>
+      <form
+        method="post"
+        action="{{ url_for('settings_points_log') }}"
+        onsubmit="return confirm('Start logging to a brand-new sheet? The current one stays in your Drive but stops being updated.')"
+      >
+        <button type="submit" name="create" value="1" class="save-button">
+          Start a new log sheet
+        </button>
+      </form>
+    {% else %}
+      <p class="settings-hint">
+        The kiosk can only write to a sheet it created itself — that's what
+        keeps it from having access to the rest of your Drive — so create it
+        here rather than pointing at an existing one.
+      </p>
+      <form method="post" action="{{ url_for('settings_points_log') }}">
+        <button type="submit" name="create" value="1" class="save-button">
+          Create the log sheet
+        </button>
+      </form>
+    {% endif %}
+  </section>
+
   <section class="settings-card" id="sleep">
     <h2>Sleep Screen</h2>
     <p class="settings-hint">

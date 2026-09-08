@@ -14,6 +14,10 @@ DEFAULTS = {
     "zip_code": "90008",
     "task_list_ids": [],
     "points_tracking": False,
+    "points_log_enabled": False,
+    "points_log_folder_id": "",
+    "points_log_spreadsheet_id": "",
+    "points_log_tabs": {},
     "ui_scale": 1.0,
     "sleep_enabled": False,
     "view": "week3",
@@ -88,6 +92,55 @@ def get_points_tracking():
 def set_points_tracking(enabled):
     config = load_config()
     config["points_tracking"] = bool(enabled)
+    save_config(config)
+
+
+def get_points_log_enabled():
+    """Whether completed tasks are appended to the points log spreadsheet.
+    Off by default: the kiosk pulls from main automatically, so this has to
+    stay inert on arrival until the sheet has actually been created."""
+    return bool(load_config().get("points_log_enabled", DEFAULTS["points_log_enabled"]))
+
+
+def set_points_log_enabled(enabled):
+    config = load_config()
+    config["points_log_enabled"] = bool(enabled)
+    save_config(config)
+
+
+def get_points_log_ids():
+    """Return (folder_id, spreadsheet_id) for the log, empty strings when it
+    hasn't been created yet."""
+    config = load_config()
+    return (
+        config.get("points_log_folder_id") or "",
+        config.get("points_log_spreadsheet_id") or "",
+    )
+
+
+def set_points_log_ids(folder_id, spreadsheet_id):
+    """Record a freshly created log. The per-list tab map belongs to that
+    spreadsheet, so pointing at a different one clears it."""
+    config = load_config()
+    if spreadsheet_id != config.get("points_log_spreadsheet_id"):
+        config["points_log_tabs"] = {}
+    config["points_log_folder_id"] = folder_id
+    config["points_log_spreadsheet_id"] = spreadsheet_id
+    save_config(config)
+
+
+def get_points_log_tabs():
+    """Map of task list ID -> numeric sheet (tab) ID within the log
+    spreadsheet. Numeric IDs survive a tab being renamed; titles don't."""
+    tabs = load_config().get("points_log_tabs") or {}
+    return {str(k): v for k, v in tabs.items() if isinstance(v, int)}
+
+
+def set_points_log_tab(task_list_id, sheet_id):
+    config = load_config()
+    tabs = dict(config.get("points_log_tabs") or {})
+    tabs[str(task_list_id)] = int(sheet_id)
+    config["points_log_tabs"] = tabs
     save_config(config)
 
 

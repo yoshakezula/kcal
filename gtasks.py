@@ -15,6 +15,11 @@ POINTS_PATTERN_RE = re.compile(r"(\d+)\s?pts\.?(?![a-zA-Z])", re.IGNORECASE)
 # The hidden bookkeeping task that stores the cumulative points total.
 TOTAL_POINTS_TITLE_RE = re.compile(r"^Total Points:\s*(\d+)$")
 
+# Task list titles change rarely but are needed on every toggle (they name
+# the tab in the points log), so they're cached rather than refetched.
+_TITLE_TTL = dt.timedelta(hours=6)
+_title_cache = {}  # task list ID -> (title, fetched_at)
+
 
 def _service():
     return build("tasks", "v1", credentials=get_credentials(), cache_discovery=False)
@@ -50,6 +55,23 @@ def list_task_lists():
         if not page_token:
             break
     return task_lists
+
+
+def get_task_list_title(task_list_id):
+    """The display name of one task list, cached in memory. Falls back to the
+    ID if the lookup fails, so a caller that only needs a label never has to
+    handle an error."""
+    cached = _title_cache.get(task_list_id)
+    now = dt.datetime.now()
+    if cached and (now - cached[1]) < _TITLE_TTL:
+        return cached[0]
+    try:
+        entry = _service().tasklists().get(tasklist=task_list_id).execute()
+        title = entry.get("title") or task_list_id
+    except Exception:
+        return cached[0] if cached else task_list_id
+    _title_cache[task_list_id] = (title, now)
+    return title
 
 
 def _normalize_task(raw_task, points_enabled=False):
@@ -175,13 +197,27 @@ def adjust_total_points(task_list_id, delta):
 
 
 def set_task_completed(task_list_id, task_id, completed, points_enabled=False):
-    """Mark a task completed or not-completed, returning (task, total_points).
-    When points tracking is enabled and the task carries a point value, the
-    cumulative points total is adjusted accordingly; total_points is the new
-    total, or None when points tracking is off or the task has no points."""
+    """Mark a task completed or not-completed, returning
+    (task, total_points, changed).
+
+    The status is read first and the write skipped when it already matches,
+    which makes a repeated request a no-op. That matters because the points
+    total is kept as a running counter: patching an already-completed task
+    would add its points a second time. `changed` is False for such a
+    no-op, so the caller can skip logging it too.
+
+    total_points is the new cumulative total, or None when points tracking
+    is off, the task has no point value, or nothing changed."""
     service = _service()
-    body = {"status": "completed" if completed else "needsAction"}
-    raw_task = service.tasks().patch(tasklist=task_list_id, task=task_id, body=body).execute()
+    target = "completed" if completed else "needsAction"
+
+    current = service.tasks().get(tasklist=task_list_id, task=task_id).execute()
+    if current.get("status") == target:
+        return _normalize_task(current, points_enabled=points_enabled), None, False
+
+    raw_task = service.tasks().patch(
+        tasklist=task_list_id, task=task_id, body={"status": target}
+    ).execute()
     task = _normalize_task(raw_task, points_enabled=points_enabled)
 
     total_points = None
@@ -189,4 +225,4 @@ def set_task_completed(task_list_id, task_id, completed, points_enabled=False):
         delta = task["points"] if completed else -task["points"]
         total_points = adjust_total_points(task_list_id, delta)
 
-    return task, total_points
+    return task, total_points, True

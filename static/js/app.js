@@ -7,6 +7,7 @@
     "July", "August", "September", "October", "November", "December",
   ];
   const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+  const TOGGLE_TIMEOUT_MS = 15 * 1000;
   const WEATHER_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
   const SLEEP_TIMEOUT_MS = 10 * 60 * 1000;
   const SWIPE_THRESHOLD_PX = 60;
@@ -1013,14 +1014,22 @@
 
   // ---------- Overlay ----------
 
+  // Which overlay the panel is currently showing ("tasks", "events", …), or
+  // null when it's closed. A slow task toggle that resolves after the popup
+  // was dismissed — or after a different overlay opened over it — must not
+  // redraw itself back into view, so it checks this first.
+  let openOverlayKind = null;
+
   function openOverlay(bodyHtml, opts) {
     el.overlayBody.innerHTML = bodyHtml;
     el.overlayPanel.classList.toggle("overlay-panel-wide", !!(opts && opts.wide));
     el.overlay.classList.remove("hidden");
+    openOverlayKind = (opts && opts.kind) || null;
   }
 
   function closeOverlay() {
     el.overlay.classList.add("hidden");
+    openOverlayKind = null;
   }
 
   function detailRowHtml(evt) {
@@ -1138,6 +1147,10 @@
     pointsEnabled: false,
     loaded: false, // true once a load attempt (success or failure) has completed
     loadOk: false,
+    // "listId:taskId" for every toggle waiting on the server. A row with a
+    // toggle in flight ignores further taps, and a background reload holds
+    // off entirely, so half-applied state never gets overwritten.
+    pending: new Set(),
   };
   let tasksPromise = null; // in-flight load, so callers can await instead of duplicating the fetch
 
@@ -1145,10 +1158,15 @@
     return String(str).replace(/"/g, "&quot;");
   }
 
+  function pendingKey(listId, taskId) {
+    return `${listId}:${taskId}`;
+  }
+
   function taskRowHtml(task, listId) {
+    const isPending = taskState.pending.has(pendingKey(listId, task.id));
     return `
-      <div class="task-row ${task.completed ? "task-completed" : ""}" data-task-id="${escapeAttr(task.id)}" data-list-id="${escapeAttr(listId)}">
-        <button class="task-check ${task.completed ? "checked" : ""}" aria-label="${task.completed ? "Mark incomplete" : "Mark complete"}"></button>
+      <div class="task-row ${task.completed ? "task-completed" : ""} ${isPending ? "task-pending" : ""}" data-task-id="${escapeAttr(task.id)}" data-list-id="${escapeAttr(listId)}">
+        <button class="task-check ${task.completed ? "checked" : ""}" ${isPending ? "disabled" : ""} aria-label="${task.completed ? "Mark incomplete" : "Mark complete"}"></button>
         <div class="task-title">${escapeHtml(task.title)}</div>
         ${taskState.pointsEnabled && task.points ? `<div class="task-points">+${task.points}</div>` : ""}
       </div>`;
@@ -1185,7 +1203,7 @@
   function renderTasksOverlay() {
     // Several lists side by side need the room; a single one reads better
     // in the normal-width panel.
-    openOverlay(buildTasksOverlayHtml(), { wide: taskState.columns.length > 1 });
+    openOverlay(buildTasksOverlayHtml(), { wide: taskState.columns.length > 1, kind: "tasks" });
 
     el.overlayBody.querySelectorAll(".task-check").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1241,6 +1259,11 @@
   // refetches fresh data instead of relying on a stale cache forever.
   function loadTasksData() {
     if (tasksPromise) return tasksPromise;
+    // A reload replaces every column and task object wholesale. Doing that
+    // mid-toggle would strand the optimistic update on an orphaned object and
+    // leave the next tap reading a status the server hasn't applied yet — the
+    // way a check followed by an uncheck could end up sending "check" twice.
+    if (taskState.pending.size) return Promise.resolve();
     tasksPromise = (async () => {
       try {
         const ok = await loadTaskLists();
@@ -1251,6 +1274,7 @@
       } finally {
         taskState.loaded = true;
         tasksPromise = null;
+        renderTasksOverlayIfOpen();
       }
     })();
     return tasksPromise;
@@ -1258,48 +1282,79 @@
 
   async function openTasksOverlay() {
     if (!taskState.loaded) {
-      openOverlay(`<h2>Tasks</h2><p>Loading&hellip;</p>`);
+      openOverlay(`<h2>Tasks</h2><p>Loading&hellip;</p>`, { kind: "tasks" });
       await loadTasksData();
     }
     if (!taskState.loadOk) {
-      openOverlay(`<h2>Tasks</h2><p>Couldn't load task lists. Check Settings.</p>`);
+      openOverlay(`<h2>Tasks</h2><p>Couldn't load task lists. Check Settings.</p>`, { kind: "tasks" });
       return;
     }
     if (!taskState.columns.length) {
-      openOverlay(`<h2>Tasks</h2><p>No task lists found.</p>`);
+      openOverlay(`<h2>Tasks</h2><p>No task lists found.</p>`, { kind: "tasks" });
       return;
     }
     renderTasksOverlay();
   }
 
+  // Redraws the popup only when it's the thing on screen, so a response that
+  // arrives after the user closed it (or opened an event overlay over it)
+  // updates state quietly instead of yanking the task list back into view.
+  function renderTasksOverlayIfOpen() {
+    if (openOverlayKind === "tasks") renderTasksOverlay();
+  }
+
   async function toggleTask(listId, taskId) {
+    const key = pendingKey(listId, taskId);
+    if (taskState.pending.has(key)) return; // a tap is already in flight
+
     const column = taskState.columns.find((c) => c.id === listId);
     const task = column && column.tasks.find((t) => t.id === taskId);
-    if (!task) return;
+    if (!task) {
+      // The row outlived its data — the list was deselected in Settings, or
+      // the completion aged out at midnight. Redraw to match reality.
+      renderTasksOverlayIfOpen();
+      return;
+    }
+
     const newCompleted = !task.completed;
     const pointsDelta = taskState.pointsEnabled && task.points ? (newCompleted ? task.points : -task.points) : 0;
 
+    taskState.pending.add(key);
     task.completed = newCompleted; // optimistic
     if (pointsDelta) column.totalPoints = (column.totalPoints || 0) + pointsDelta;
-    renderTasksOverlay();
+    renderTasksOverlayIfOpen();
     if (newCompleted) fireConfetti();
+
+    // A request that never settles would leave the row disabled for good, so
+    // give up after a while and let the revert path run.
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), TOGGLE_TIMEOUT_MS);
 
     try {
       const response = await fetch("/api/tasks/toggle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tasklist: listId, task: taskId, completed: newCompleted }),
+        signal: abort.signal,
       });
       if (!response.ok) throw new Error("toggle failed");
       const data = await response.json();
+      // Trust the server over the optimistic guess: if it reports the task
+      // was already in this state, `changed` is false and the row snaps back
+      // rather than silently disagreeing with Tasks.
+      if (data.task && typeof data.task.completed === "boolean") {
+        task.completed = data.task.completed;
+      }
       if (typeof data.totalPoints === "number") {
         column.totalPoints = data.totalPoints;
-        renderTasksOverlay();
       }
     } catch (err) {
       task.completed = !newCompleted; // revert on failure
       if (pointsDelta) column.totalPoints = (column.totalPoints || 0) - pointsDelta;
-      renderTasksOverlay();
+    } finally {
+      clearTimeout(timer);
+      taskState.pending.delete(key);
+      renderTasksOverlayIfOpen();
     }
   }
 
