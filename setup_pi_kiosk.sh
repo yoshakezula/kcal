@@ -140,7 +140,8 @@ if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
   while true; do
     cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars \
       --disable-session-crashed-bubble --check-for-update-interval=31536000 \
-      --no-memcheck --password-store=basic --incognito http://127.0.0.1:5000
+      --no-memcheck --password-store=basic --incognito --disable-gpu \
+      http://127.0.0.1:5000
     sleep 2
   done
 fi
@@ -198,13 +199,13 @@ fi
 
 # ---------- Scheduled kiosk restart (optional) ----------
 
-printf 'Set up a scheduled kiosk restart at noon and midnight, to clear any Chromium GPU/memory buildup before it makes the display sluggish (y/N): '
+printf 'Set up a scheduled kiosk restart every 6 hours, to clear any Chromium GPU/memory buildup before it makes the display sluggish (y/N): '
 read -r setup_restart_cron
 if [ "$setup_restart_cron" = "y" ] || [ "$setup_restart_cron" = "Y" ]; then
     echo "==> Allowing $USERNAME to restart getty@tty1.service without a password"
     ensure_sudoers_line "/usr/bin/systemctl restart getty@tty1.service"
 
-    CRON_LINE="0 0,12 * * * sudo systemctl restart getty@tty1.service >> $USER_HOME/kiosk-restart.log 2>&1"
+    CRON_LINE="0 0,6,12,18 * * * sudo systemctl restart getty@tty1.service >> $USER_HOME/kiosk-restart.log 2>&1"
     ( sudo -u "$USERNAME" crontab -l 2>/dev/null | grep -vF "restart getty@tty1.service"
       echo "$CRON_LINE" ) | sudo -u "$USERNAME" crontab -
     echo "    Cron entry added: $CRON_LINE"
