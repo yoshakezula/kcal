@@ -126,7 +126,10 @@ each — handy for a list per kid. Leave every box unchecked to show them all.
 
 Also on the same page, set a **zip code** under Weather Location to control
 the 7-day forecast strip at the top of the kiosk view (defaults to `90008`).
-This uses [Open-Meteo](https://open-meteo.com/), which needs no API key.
+Forecasts come from the [National Weather Service](https://www.weather.gov/documentation/services-web-api),
+which needs no API key. NWS works off coordinates rather than zip codes, so
+the zip is resolved to a lat/lon via [zippopotam.us](https://zippopotam.us/)
+first. Both are US-only.
 
 ## 5. Points log (optional)
 
