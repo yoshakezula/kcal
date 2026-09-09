@@ -51,6 +51,20 @@ USER_HOME=$(eval echo "~$USERNAME")
 
 echo "==> Using user '$USERNAME' (home: $USER_HOME), repo at $REPO_DIR"
 
+# Grants $USERNAME passwordless sudo for one exact command, via the shared
+# /etc/sudoers.d/kcal-restart file. Idempotent — checks before appending, so
+# both the auto-deploy and scheduled-restart blocks below can each ensure
+# just the line(s) they need without clobbering the other's.
+ensure_sudoers_line() {
+    cmd=$1
+    touch /etc/sudoers.d/kcal-restart
+    if grep -qF "$cmd" /etc/sudoers.d/kcal-restart 2>/dev/null; then
+        return
+    fi
+    echo "$USERNAME ALL=(ALL) NOPASSWD: $cmd" >> /etc/sudoers.d/kcal-restart
+    chmod 440 /etc/sudoers.d/kcal-restart
+}
+
 # ---------- Packages ----------
 
 echo "==> Installing cage, Chromium, and a color emoji font"
@@ -167,14 +181,30 @@ fi
 printf 'Set up automatic git-pull-and-restart via cron too (in addition to the pull-on-start already configured)? (y/N): '
 read -r setup_cron
 if [ "$setup_cron" = "y" ] || [ "$setup_cron" = "Y" ]; then
-    echo "==> Allowing $USERNAME to restart kcal.service without a password"
-    echo "$USERNAME ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart kcal.service" \
-        > "/etc/sudoers.d/kcal-restart"
-    chmod 440 "/etc/sudoers.d/kcal-restart"
+    echo "==> Allowing $USERNAME to restart kcal.service and getty@tty1.service without a password"
+    # update.sh restarts both: kcal.service picks up backend changes, and
+    # getty@tty1.service refreshes the browser view itself (see "Manually
+    # pulling an update and refreshing the kiosk view" in README.md).
+    ensure_sudoers_line "/usr/bin/systemctl restart kcal.service"
+    ensure_sudoers_line "/usr/bin/systemctl restart getty@tty1.service"
 
     chmod +x "$REPO_DIR/update.sh"
     CRON_LINE="*/5 * * * * $REPO_DIR/update.sh >> $USER_HOME/kcal-update.log 2>&1"
     ( sudo -u "$USERNAME" crontab -l 2>/dev/null | grep -vF "$REPO_DIR/update.sh"
+      echo "$CRON_LINE" ) | sudo -u "$USERNAME" crontab -
+    echo "    Cron entry added: $CRON_LINE"
+fi
+
+# ---------- Scheduled kiosk restart (optional) ----------
+
+printf 'Set up a scheduled kiosk restart at noon and midnight, to clear any Chromium GPU/memory buildup before it makes the display sluggish (y/N): '
+read -r setup_restart_cron
+if [ "$setup_restart_cron" = "y" ] || [ "$setup_restart_cron" = "Y" ]; then
+    echo "==> Allowing $USERNAME to restart getty@tty1.service without a password"
+    ensure_sudoers_line "/usr/bin/systemctl restart getty@tty1.service"
+
+    CRON_LINE="0 0,12 * * * sudo systemctl restart getty@tty1.service >> $USER_HOME/kiosk-restart.log 2>&1"
+    ( sudo -u "$USERNAME" crontab -l 2>/dev/null | grep -vF "restart getty@tty1.service"
       echo "$CRON_LINE" ) | sudo -u "$USERNAME" crontab -
     echo "    Cron entry added: $CRON_LINE"
 fi

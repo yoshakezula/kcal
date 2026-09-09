@@ -441,6 +441,39 @@ If you don't want to wait for the cron interval, or haven't set up
    sudo systemctl restart getty@tty1.service
    ```
 
+### Scheduled restart (noon and midnight) to clear Chromium memory buildup
+
+A Chromium tab left open for days on end — as this kiosk's is, since nothing
+ever navigates away from it — can gradually accumulate memory in its GPU
+compositor path (the `--enable-gpu-rasterization`/`--use-angle=gles` path
+against the Pi's vc4/v3d driver), eating into the board's limited, non-swappable
+CMA pool. That shows up as the display getting progressively more sluggish
+the longer the Pi stays up, with no single crash to point at.
+
+Rather than track down the exact leak, the pragmatic fix is to restart the
+kiosk view on a schedule, before the buildup becomes noticeable — using the
+same `getty@tty1.service` restart described above, which relaunches
+cage + Chromium fresh.
+
+`setup_pi_kiosk.sh` sets this up for you as an opt-in prompt during setup.
+To add it by hand instead:
+
+1. **Grant the same passwordless sudo** as the auto-deploy section above, if
+   you haven't already (`sudo visudo -f /etc/sudoers.d/kcal-restart`):
+   ```
+   username ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart getty@tty1.service
+   ```
+2. **Add a cron entry** — `crontab -e`, then add (fires at noon and
+   midnight; adjust the hours if those land at a bad time for your display):
+   ```
+   0 0,12 * * * sudo systemctl restart getty@tty1.service >> /home/username/kiosk-restart.log 2>&1
+   ```
+
+This briefly blanks the screen (a couple seconds, per the `sleep 2` in the
+autostart loop) twice a day — harmless for a calendar kiosk nobody's staring
+at around midnight/noon nonstop, but worth knowing about if you notice a
+momentary blank screen at those times.
+
 ## 7. Access it from other devices on your network
 
 By default `app.py` binds to `0.0.0.0`, so it's reachable from other devices
@@ -505,3 +538,7 @@ worth trying first if you'd rather skip the reservation step.
 - **Wrong day boundaries for all-day events**: the app uses the host
   computer's local timezone for all date math — make sure the kiosk
   machine's system clock/timezone is set correctly.
+- **Display gets sluggish the longer the Pi has been up**: likely Chromium's
+  GPU compositor accumulating memory over a long-lived tab — see
+  "Scheduled restart (noon and midnight) to clear Chromium memory buildup"
+  above for the fix.
