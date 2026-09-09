@@ -23,6 +23,11 @@
   // the fixed strip instead of the taller row-proportional one.
   const TALL_FORECAST_VIEWS = new Set(["week3", "list"]);
 
+  // Days in the forecast strip. Only the loading placeholder needs this — a
+  // real forecast is drawn from however many days the server sends — but it
+  // has to match, or the placeholder would be a different width.
+  const FORECAST_DAYS = 7;
+
   // How much taller the forecast strip is than a single calendar row, for
   // the row-proportional views (week/week2). Calibrated so it reproduces the
   // old hand-picked 200px look at a typical window size, but — unlike a
@@ -332,10 +337,12 @@
   // ---------- Weather forecast strip ----------
 
   function renderForecast(forecast) {
-    const highs = forecast.map((d) => d.high);
-    const lows = forecast.map((d) => d.low);
-    const tempMax = Math.max(...highs);
-    const tempMin = Math.min(...lows);
+    // NWS publishes the low in a day's *night* period, so the last day of
+    // the window can arrive with a high and no low yet. Those days still
+    // draw, but they're kept out of the scale rather than collapsing it.
+    const temps = forecast.flatMap((d) => [d.high, d.low]).filter((t) => t != null);
+    const tempMax = Math.max(...temps);
+    const tempMin = Math.min(...temps);
     const tempSpan = Math.max(tempMax - tempMin, 1);
     const today = new Date();
 
@@ -349,8 +356,9 @@
         const dayDate = new Date(y, m - 1, d);
         const dayLabel = isSameDay(dayDate, today) ? "Today" : WEEKDAY_NAMES[dayDate.getDay()];
 
+        const dayLow = day.low != null ? day.low : day.high;
         const tempTop = ((tempMax - day.high) / tempSpan) * 100;
-        const tempHeight = Math.max(((day.high - day.low) / tempSpan) * 100, 8);
+        const tempHeight = Math.max(((day.high - dayLow) / tempSpan) * 100, 8);
 
         const humHigh = day.humidityHigh;
         const humLow = day.humidityLow;
@@ -368,7 +376,7 @@
                 <div class="forecast-track">
                   <div class="forecast-bar forecast-bar-temp" style="top:${tempTop}%;height:${tempHeight}%"></div>
                 </div>
-                <span class="forecast-value forecast-value-low">${day.low}&deg;</span>
+                <span class="forecast-value forecast-value-low">${day.low != null ? day.low + "&deg;" : "–"}</span>
               </div>
               <div class="forecast-metric">
                 <span class="forecast-value">${hasHumidity ? humHigh + "%" : "–"}</span>
@@ -648,18 +656,57 @@
   }
 
   let lastForecast = null; // most recently fetched forecast, independent of which view is showing
+  // "loading" until the first fetch settles. The strip claims its space and
+  // shows a placeholder in that window, so the weather arriving doesn't shove
+  // the calendar down a second after it painted. "unavailable" (no location
+  // configured, or the fetch failed) hides the strip as before.
+  let forecastState = "loading";
 
   // The forecast strip is a top-level row, not part of any one view's
-  // content, so its visibility depends on both whether we have data and
-  // whether the current view wants it shown (hidden in month view - it's
-  // dense enough there already).
+  // content, so its visibility depends on both whether we have data (or are
+  // still waiting for it) and whether the current view wants it shown
+  // (hidden in month view - it's dense enough there already).
   function updateForecastVisibility() {
-    const shouldShow = state.view !== "month" && lastForecast && lastForecast.length > 0;
+    const hasForecast = lastForecast && lastForecast.length > 0;
+    const shouldShow = state.view !== "month" && (hasForecast || forecastState === "loading");
     el.forecastStrip.classList.toggle("hidden", !shouldShow);
     el.forecastStrip.classList.toggle("forecast-strip-tall", TALL_FORECAST_VIEWS.has(state.view));
     // Re-render so the bar-chart scale (short vs. tall) matches the new view.
-    if (shouldShow) renderForecast(lastForecast);
+    if (shouldShow) {
+      if (hasForecast) renderForecast(lastForecast);
+      else renderForecastPlaceholder();
+    }
     updateForecastHeight(FORECAST_HEIGHT_WEEKS[state.view]);
+  }
+
+  // Mirrors renderForecast's markup - same legend column, same seven day
+  // columns, same tracks - so the real forecast swaps in without the strip
+  // changing height. The weekday labels are known without the server, so
+  // only the values themselves shimmer.
+  function renderForecastPlaceholder() {
+    const today = new Date();
+    const daysHtml = Array.from({ length: FORECAST_DAYS }, (_, i) => {
+      const dayDate = addDays(today, i);
+      const dayLabel = i === 0 ? "Today" : WEEKDAY_NAMES[dayDate.getDay()];
+      const metricHtml = `
+              <div class="forecast-metric">
+                <span class="forecast-value"><span class="forecast-shimmer forecast-shimmer-value"></span></span>
+                <div class="forecast-track"><span class="forecast-shimmer forecast-shimmer-bar"></span></div>
+                <span class="forecast-value"><span class="forecast-shimmer forecast-shimmer-value"></span></span>
+              </div>`;
+      return `
+          <div class="forecast-day forecast-day-loading ${i === 0 ? "today" : ""}">
+            <div class="forecast-day-label">${dayLabel}</div>
+            <div class="forecast-icon"><span class="forecast-shimmer forecast-shimmer-icon"></span></div>
+            <div class="forecast-metrics">${metricHtml}${metricHtml}</div>
+          </div>`;
+    }).join("");
+
+    el.forecastStrip.innerHTML = `
+      <div class="forecast-legend">
+        <div class="forecast-legend-item"><span class="forecast-spinner"></span>Loading&hellip;</div>
+      </div>
+      <div class="forecast-days">${daysHtml}</div>`;
   }
 
   // For the row-proportional views (week/week2), sizes the forecast strip as
@@ -688,17 +735,25 @@
       const response = await fetch("/api/weather");
       if (!response.ok) {
         lastForecast = null; // no location configured yet, or a transient error
+        forecastState = "unavailable";
         updateForecastVisibility();
         return;
       }
       const data = await response.json();
       lastForecast = data.forecast || null;
+      forecastState = lastForecast && lastForecast.length ? "ready" : "unavailable";
       if (lastForecast && lastForecast.length) {
         renderForecast(lastForecast);
       }
       updateForecastVisibility();
     } catch (err) {
-      // transient network error: keep showing the last-known forecast
+      // Transient network error: keep showing the last-known forecast. But if
+      // there has never been one, drop the placeholder rather than leave it
+      // shimmering until the next refresh.
+      if (forecastState === "loading") {
+        forecastState = "unavailable";
+        updateForecastVisibility();
+      }
     }
   }
 
@@ -1563,6 +1618,9 @@
 
   updateHeaderDensity();
   render();
+  // Claim the strip's space with the loading placeholder before the fetch
+  // starts, so the calendar is laid out around it from the first paint.
+  updateForecastVisibility();
   loadEvents();
   loadWeather();
   armSleepTimer();

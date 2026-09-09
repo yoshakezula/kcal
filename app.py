@@ -1,5 +1,6 @@
 import datetime as dt
 import platform
+import threading
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
@@ -376,5 +377,17 @@ def api_view():
     return jsonify({"view": view})
 
 
+def _prime_weather_cache():
+    """Warm the forecast cache off the request path. The first fetch resolves
+    the zip and makes several NWS calls, and the kiosk boots straight into a
+    view that wants the forecast strip - so pay that cost during startup
+    rather than in front of the user."""
+    try:
+        weather.get_forecast()
+    except Exception:
+        pass  # /api/weather retries and surfaces the error itself
+
+
 if __name__ == "__main__":
+    threading.Thread(target=_prime_weather_cache, daemon=True).start()
     app.run(host="0.0.0.0", port=5000, debug=False)
