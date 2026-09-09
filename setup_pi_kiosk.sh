@@ -115,6 +115,7 @@ Type=simple
 User=$USERNAME
 WorkingDirectory=$REPO_DIR
 ExecStartPre=-/usr/bin/git -C $REPO_DIR pull origin main
+ExecStartPre=-$PYTHON_BIN -m pip install -q -r $REPO_DIR/requirements.txt
 ExecStart=$PYTHON_BIN $REPO_DIR/app.py
 Restart=on-failure
 

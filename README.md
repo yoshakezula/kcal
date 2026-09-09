@@ -222,27 +222,38 @@ and the `token.json` it produces into this project's folder on the Pi.
    User=username
    WorkingDirectory=/home/username/src/kcal
    ExecStartPre=-/usr/bin/git -C /home/username/src/kcal pull origin main
+   ExecStartPre=-/usr/bin/python3 -m pip install -q -r /home/username/src/kcal/requirements.txt
    ExecStart=/usr/bin/python3 /home/username/src/kcal/app.py
    Restart=on-failure
 
    [Install]
    WantedBy=multi-user.target
    ```
-   The `ExecStartPre` line pulls the latest commit every time the service
+   The two `ExecStartPre` lines run before the app every time the service
    starts — on boot, and on any manual/cron restart — so you don't have to
-   pull by hand. The leading `-` tells systemd to ignore a failed pull
-   (e.g. no network yet, or a merge conflict) rather than treat it as a
-   failure that blocks the app from starting at all; worst case it just
-   starts with whatever code was already on disk.
+   deploy by hand. The first pulls the latest commit; the second installs
+   anything new in `requirements.txt` into the same interpreter `ExecStart`
+   uses, so adding a dependency doesn't strand the Pi on a missing package.
+   The install is a fast no-op (a few seconds, no network) once everything
+   is already satisfied.
+
+   The leading `-` on both tells systemd to ignore a failed step (e.g. no
+   network yet, or a merge conflict) rather than treat it as a failure that
+   blocks the app from starting at all; worst case it just starts with
+   whatever code and packages were already on disk.
 
    Adjust `User`/`WorkingDirectory`/`ExecStart` to match wherever you put the
    project and whichever Python/venv you're using — **if you installed
    dependencies into a virtualenv** (e.g. via `python -m venv myenv` from
-   step 2 of setup), `ExecStart` needs to point at that venv's interpreter
-   (e.g. `/home/username/myenv/bin/python`), not `/usr/bin/python3` —
-   otherwise the service runs with the system Python, which won't have any
-   of the packages from `requirements.txt` installed, and will crash-loop
-   with `ModuleNotFoundError` until systemd gives up and marks it failed.
+   step 2 of setup), both `ExecStart` and the `pip` `ExecStartPre` need to
+   point at that venv's interpreter (e.g. `/home/username/myenv/bin/python`),
+   not `/usr/bin/python3` — otherwise the service runs with the system
+   Python, which won't have any of the packages from `requirements.txt`
+   installed, and will crash-loop with `ModuleNotFoundError` until systemd
+   gives up and marks it failed. Note that a venv created with
+   `--system-site-packages` treats a distro-installed package (e.g. Debian's
+   `python3-flask`) as already satisfying a requirement, so `pip` will leave
+   it alone rather than install a newer copy into the venv.
    Then:
    ```
    sudo systemctl daemon-reload
