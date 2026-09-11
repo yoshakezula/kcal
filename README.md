@@ -452,38 +452,78 @@ If you don't want to wait for the cron interval, or haven't set up
    sudo systemctl restart getty@tty1.service
    ```
 
-### Scheduled restart (noon and midnight) to clear Chromium memory buildup
+### Scheduled restart (every 6 hours) to clear Chromium memory buildup
 
 A Chromium tab left open for days on end — as this kiosk's is, since nothing
 ever navigates away from it — can gradually accumulate memory in its GPU
 compositor path (the `--enable-gpu-rasterization`/`--use-angle=gles` path
 against the Pi's vc4/v3d driver), eating into the board's limited, non-swappable
 CMA pool. That shows up as the display getting progressively more sluggish
-the longer the Pi stays up, with no single crash to point at.
+the longer the Pi stays up, with no single crash to point at — and left
+unchecked for long enough, it can exhaust the CMA pool badly enough to lock
+up the whole system, not just the display (this has happened in practice: a
+scheduled restart's own relaunch of Chromium once failed to come back, and
+the resulting memory pressure hard-froze the Pi for over 13 hours until it
+was physically power-cycled).
 
 Rather than track down the exact leak, the pragmatic fix is to restart the
-kiosk view on a schedule, before the buildup becomes noticeable — using the
-same `getty@tty1.service` restart described above, which relaunches
-cage + Chromium fresh.
+kiosk view on a schedule, before the buildup becomes noticeable, via the
+same `getty@tty1.service` restart described above (which relaunches
+cage + Chromium fresh) — but wrapped in a watchdog that verifies Chromium
+actually comes back up, since the restart itself can occasionally fail to
+relaunch it. (Plain `--disable-gpu` was tried as a way to avoid the leak
+entirely, but forces software rendering, which on this hardware uses *more*
+memory up front than the GPU path — it made restarts more likely to fail,
+not less, so it isn't used here.)
 
-`setup_pi_kiosk.sh` sets this up for you as an opt-in prompt during setup.
-To add it by hand instead:
+`setup_pi_kiosk.sh` sets this up for you as an opt-in prompt during setup,
+writing the watchdog script below to `~/kiosk-restart.sh`. To add it by hand
+instead:
 
-1. **Grant the same passwordless sudo** as the auto-deploy section above, if
-   you haven't already (`sudo visudo -f /etc/sudoers.d/kcal-restart`):
+1. **Grant the same passwordless sudo** as the auto-deploy section above,
+   plus reboot, if you haven't already
+   (`sudo visudo -f /etc/sudoers.d/kcal-restart`):
    ```
    username ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart getty@tty1.service
+   username ALL=(ALL) NOPASSWD: /usr/sbin/reboot
    ```
-2. **Add a cron entry** — `crontab -e`, then add (fires at noon and
-   midnight; adjust the hours if those land at a bad time for your display):
+2. **Create `~/kiosk-restart.sh`**, make it executable, and give it this
+   content — it restarts the kiosk, checks whether Chromium's RSS is
+   nonzero a few seconds later, retries once if not, and reboots the Pi as
+   a last resort if Chromium still hasn't come back:
+   ```sh
+   #!/bin/sh
+   log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1"; }
+   chromium_rss() { ps -C chromium -o rss= 2>/dev/null | awk '{s+=$1} END {print s+0}'; }
+   restart_and_check() {
+     sudo systemctl restart getty@tty1.service
+     sleep 20
+     chromium_rss
+   }
+
+   log "Restarting kiosk"
+   rss=$(restart_and_check)
+   if [ "$rss" -gt 0 ]; then log "Chromium back up (rss=${rss}kB)"; exit 0; fi
+
+   log "Chromium did not come back (rss=0kB), retrying"
+   rss=$(restart_and_check)
+   if [ "$rss" -gt 0 ]; then log "Chromium back up after retry (rss=${rss}kB)"; exit 0; fi
+
+   log "Chromium still not up after retry, rebooting"
+   sudo reboot
    ```
-   0 0,12 * * * sudo systemctl restart getty@tty1.service >> /home/username/kiosk-restart.log 2>&1
+3. **Add a cron entry** — `crontab -e`, then add (fires at midnight, 6am,
+   noon, and 6pm; adjust the hours if those land at a bad time for your
+   display):
+   ```
+   0 0,6,12,18 * * * /home/username/kiosk-restart.sh >> /home/username/kiosk-restart.log 2>&1
    ```
 
 This briefly blanks the screen (a couple seconds, per the `sleep 2` in the
-autostart loop) twice a day — harmless for a calendar kiosk nobody's staring
-at around midnight/noon nonstop, but worth knowing about if you notice a
-momentary blank screen at those times.
+autostart loop) four times a day — harmless for a calendar kiosk nobody's
+staring at nonstop, but worth knowing about if you notice a momentary blank
+screen at those times. A full reboot (only on the rare failed-restart path)
+takes longer, on the order of a minute.
 
 ## 7. Access it from other devices on your network
 

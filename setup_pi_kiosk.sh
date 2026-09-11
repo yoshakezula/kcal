@@ -140,8 +140,7 @@ if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
   while true; do
     cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars \
       --disable-session-crashed-bubble --check-for-update-interval=31536000 \
-      --no-memcheck --password-store=basic --incognito --disable-gpu \
-      http://127.0.0.1:5000
+      --no-memcheck --password-store=basic --incognito http://127.0.0.1:5000
     sleep 2
   done
 fi
@@ -202,11 +201,55 @@ fi
 printf 'Set up a scheduled kiosk restart every 6 hours, to clear any Chromium GPU/memory buildup before it makes the display sluggish (y/N): '
 read -r setup_restart_cron
 if [ "$setup_restart_cron" = "y" ] || [ "$setup_restart_cron" = "Y" ]; then
-    echo "==> Allowing $USERNAME to restart getty@tty1.service without a password"
+    echo "==> Allowing $USERNAME to restart getty@tty1.service and reboot without a password"
     ensure_sudoers_line "/usr/bin/systemctl restart getty@tty1.service"
+    ensure_sudoers_line "/usr/sbin/reboot"
 
-    CRON_LINE="0 0,6,12,18 * * * sudo systemctl restart getty@tty1.service >> $USER_HOME/kiosk-restart.log 2>&1"
-    ( sudo -u "$USERNAME" crontab -l 2>/dev/null | grep -vF "restart getty@tty1.service"
+    KIOSK_RESTART_SCRIPT="$USER_HOME/kiosk-restart.sh"
+    echo "==> Writing watchdog restart script to $KIOSK_RESTART_SCRIPT"
+    cat > "$KIOSK_RESTART_SCRIPT" << 'EOF'
+#!/bin/sh
+# Restarts the kiosk display and verifies Chromium actually comes back.
+# A restart that leaves Chromium dead can otherwise go unnoticed until the
+# whole Pi locks up hours later, requiring a physical power-cycle to
+# recover. Retry once, then reboot as a last resort.
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $1"
+}
+
+chromium_rss() {
+    ps -C chromium -o rss= 2>/dev/null | awk '{s+=$1} END {print s+0}'
+}
+
+restart_and_check() {
+    sudo systemctl restart getty@tty1.service
+    sleep 20
+    chromium_rss
+}
+
+log "Restarting kiosk"
+rss=$(restart_and_check)
+if [ "$rss" -gt 0 ]; then
+    log "Chromium back up (rss=${rss}kB)"
+    exit 0
+fi
+
+log "Chromium did not come back (rss=0kB), retrying"
+rss=$(restart_and_check)
+if [ "$rss" -gt 0 ]; then
+    log "Chromium back up after retry (rss=${rss}kB)"
+    exit 0
+fi
+
+log "Chromium still not up after retry, rebooting"
+sudo reboot
+EOF
+    chmod +x "$KIOSK_RESTART_SCRIPT"
+    chown "$USERNAME:$USERNAME" "$KIOSK_RESTART_SCRIPT"
+
+    CRON_LINE="0 0,6,12,18 * * * $KIOSK_RESTART_SCRIPT >> $USER_HOME/kiosk-restart.log 2>&1"
+    ( sudo -u "$USERNAME" crontab -l 2>/dev/null | grep -vF "restart getty@tty1.service" | grep -vF "kiosk-restart.sh"
       echo "$CRON_LINE" ) | sudo -u "$USERNAME" crontab -
     echo "    Cron entry added: $CRON_LINE"
 fi
