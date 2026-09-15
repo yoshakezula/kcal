@@ -358,6 +358,7 @@ see what's happening at each stage.
    ```sh
    cat << 'EOF' >> ~/.bash_profile
    if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+     export XCURSOR_THEME=blank
      until curl -s http://127.0.0.1:5000 > /dev/null; do sleep 1; done
      while true; do
        cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars \
@@ -383,6 +384,44 @@ see what's happening at each stage.
    tty1 autologin shell, so there's no desktop session to load first. The
    `while true` loop relaunches Chromium/cage automatically if it ever
    crashes.
+
+   `XCURSOR_THEME=blank` is what keeps a mouse pointer off the screen, and
+   it needs a theme to point at. Create one whose glyphs are entirely
+   transparent:
+   ```sh
+   mkdir -p ~/.icons/blank/cursors
+   python3 - ~/.icons/blank/cursors << 'PYEOF'
+   import os, struct, sys
+   IMAGE_TYPE, SIZES = 0xfffd0002, (24, 32, 48, 64)
+   out = bytearray(b"Xcur" + struct.pack("<III", 16, 0x00010000, len(SIZES)))
+   chunks, offsets = bytearray(), []
+   base = 16 + 12 * len(SIZES)
+   for s in SIZES:
+       offsets.append(base + len(chunks))
+       chunks += struct.pack("<IIII", 36, IMAGE_TYPE, s, 1)
+       chunks += struct.pack("<IIIII", s, s, 0, 0, 0)
+       chunks += b"\x00\x00\x00\x00" * (s * s)
+   for s, off in zip(SIZES, offsets):
+       out += struct.pack("<III", IMAGE_TYPE, s, off)
+   out += chunks
+   d = sys.argv[1]
+   open(os.path.join(d, "left_ptr"), "wb").write(bytes(out))
+   for n in ("default","arrow","top_left_arrow","pointer","hand1","hand2",
+             "xterm","text","watch","left_ptr_watch","progress"):
+       p = os.path.join(d, n)
+       if os.path.lexists(p): os.remove(p)
+       os.symlink("left_ptr", p)
+   PYEOF
+   printf '[Icon Theme]\nName=blank\n' > ~/.icons/blank/index.theme
+   ```
+   The app already sets `cursor: none` on every element (see `SHOW_CURSOR`
+   in `app.py`), but that alone isn't enough on a touch-only kiosk. cage
+   draws a pointer at the centre of the screen the moment it starts, and
+   touch events don't drive the Wayland pointer — so Chromium never gets a
+   pointer-enter event, never gets to apply its CSS, and the arrow sits in
+   the middle of the calendar indefinitely. The transparent theme removes it
+   at the compositor level instead. cage has no flag for this, and it
+   ignores `XCURSOR_SIZE`.
 6. **Disable console blanking** (framebuffer blanking still applies before
    cage takes the display) by appending `consoleblank=0` to the single line
    in `/boot/firmware/cmdline.txt`:

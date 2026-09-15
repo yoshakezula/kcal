@@ -125,6 +125,57 @@ EOF
 systemctl daemon-reload
 systemctl enable --now kcal.service
 
+
+# ---------- Blank cursor theme ----------
+
+# cage draws a pointer at the centre of the screen as soon as it starts, and
+# on a touch-only kiosk nothing ever moves it: touch events don't drive the
+# Wayland pointer, so Chromium never receives a pointer-enter and never gets
+# the chance to apply the page's own `cursor: none`. The arrow just sits
+# there forever. Giving cage a cursor theme whose glyphs are fully
+# transparent removes it at the compositor level, before any of that
+# matters. cage has no flag for this and ignores XCURSOR_SIZE.
+echo "==> Installing a transparent cursor theme for the kiosk"
+CURSOR_DIR="$USER_HOME/.icons/blank/cursors"
+mkdir -p "$CURSOR_DIR"
+python3 - "$CURSOR_DIR" << 'PYEOF'
+import os, struct, sys
+
+# Minimal Xcursor file, same layout a real theme uses: file header, a TOC
+# with one entry per nominal size, then an image chunk per size. Every
+# pixel is transparent, so there is nothing to draw.
+IMAGE_TYPE = 0xfffd0002
+SIZES = (24, 32, 48, 64)  # what stock themes ship; wlroots asks for 24
+
+out = bytearray(b"Xcur" + struct.pack("<III", 16, 0x00010000, len(SIZES)))
+chunks, offsets = bytearray(), []
+base = 16 + 12 * len(SIZES)
+for s in SIZES:
+    offsets.append(base + len(chunks))
+    chunks += struct.pack("<IIII", 36, IMAGE_TYPE, s, 1)
+    chunks += struct.pack("<IIIII", s, s, 0, 0, 0)  # w, h, xhot, yhot, delay
+    chunks += b"\x00\x00\x00\x00" * (s * s)
+for s, off in zip(SIZES, offsets):
+    out += struct.pack("<III", IMAGE_TYPE, s, off)
+out += chunks
+
+d = sys.argv[1]
+with open(os.path.join(d, "left_ptr"), "wb") as f:
+    f.write(bytes(out))
+# Point every name the compositor might ask for at the same blank glyph.
+for name in ("default", "arrow", "top_left_arrow", "pointer", "hand1",
+             "hand2", "xterm", "text", "watch", "left_ptr_watch", "progress"):
+    p = os.path.join(d, name)
+    if os.path.lexists(p):
+        os.remove(p)
+    os.symlink("left_ptr", p)
+PYEOF
+cat > "$USER_HOME/.icons/blank/index.theme" << 'EOF'
+[Icon Theme]
+Name=blank
+Comment=Fully transparent cursor, so the kiosk never shows a pointer
+EOF
+chown -R "$USERNAME:$USERNAME" "$USER_HOME/.icons"
 # ---------- cage + Chromium autostart ----------
 
 BASH_PROFILE="$USER_HOME/.bash_profile"
@@ -147,6 +198,8 @@ fi
 cat >> "$BASH_PROFILE" << 'EOF'
 # --- kcal kiosk autostart ---
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+  # Blank cursor theme, installed above - cage picks this up at startup.
+  export XCURSOR_THEME=blank
   until curl -s http://127.0.0.1:5000 > /dev/null; do sleep 1; done
   while true; do
     # The memory flags matter on a 1GB Pi, where Chromium is the biggest
