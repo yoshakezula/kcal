@@ -129,25 +129,91 @@ systemctl enable --now kcal.service
 
 BASH_PROFILE="$USER_HOME/.bash_profile"
 MARKER="# --- kcal kiosk autostart ---"
+END_MARKER="# --- end kcal kiosk autostart ---"
+# The block is rewritten rather than skipped, so a re-run actually updates
+# the Chromium flags on a Pi that was set up before they changed. Blocks
+# written before END_MARKER existed end at the first column-0 `fi` instead.
 if [ -f "$BASH_PROFILE" ] && grep -qF "$MARKER" "$BASH_PROFILE"; then
-    echo "==> Kiosk autostart block already present in $BASH_PROFILE, skipping"
+    echo "==> Replacing existing kiosk autostart block in $BASH_PROFILE"
+    cp "$BASH_PROFILE" "$BASH_PROFILE.bak"
+    if grep -qF "$END_MARKER" "$BASH_PROFILE"; then
+        sed -i "\|^$MARKER$|,\|^$END_MARKER$|d" "$BASH_PROFILE"
+    else
+        sed -i "\|^$MARKER$|,\|^fi$|d" "$BASH_PROFILE"
+    fi
 else
     echo "==> Adding kiosk autostart to $BASH_PROFILE"
-    cat >> "$BASH_PROFILE" << 'EOF'
+fi
+cat >> "$BASH_PROFILE" << 'EOF'
 # --- kcal kiosk autostart ---
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
   until curl -s http://127.0.0.1:5000 > /dev/null; do sleep 1; done
   while true; do
+    # The memory flags matter on a 1GB Pi, where Chromium is the biggest
+    # consumer. --process-per-site with --renderer-process-limit=1 and Site
+    # Isolation off collapse what is otherwise a second renderer process --
+    # isolation buys nothing for a kiosk showing one trusted local origin,
+    # though it would matter if this ever browsed the open web. The
+    # --disable-* group drops background machinery a kiosk never uses, and
+    # the V8 cap keeps a runaway page from eating the whole box.
     cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars \
       --disable-session-crashed-bubble --check-for-update-interval=31536000 \
-      --no-memcheck --password-store=basic --incognito http://127.0.0.1:5000
+      --password-store=basic --incognito \
+      --process-per-site --renderer-process-limit=1 \
+      --disable-features=site-per-process,IsolateOrigins,BackForwardCache,Translate \
+      --disable-background-networking --disable-sync --disable-component-update \
+      --disable-breakpad --disable-domain-reliability \
+      --js-flags=--max-old-space-size=64 \
+      http://127.0.0.1:5000
     sleep 2
   done
 fi
+# --- end kcal kiosk autostart ---
 EOF
-    chown "$USERNAME:$USERNAME" "$BASH_PROFILE"
+chown "$USERNAME:$USERNAME" "$BASH_PROFILE"
+
+
+# ---------- Memory tuning ----------
+
+# On a 1GB Pi, Chromium spends most of its life in swap, so how well swap
+# compresses decides how much headroom there is. zram-tools defaults to
+# lz4; zstd compresses noticeably better for a little CPU, and this box is
+# otherwise idle.
+echo "==> Tuning zram and swappiness"
+if [ -f /etc/default/zramswap ]; then
+    if grep -q '^ALGO=' /etc/default/zramswap; then
+        sed -i 's/^ALGO=.*/ALGO=zstd/' /etc/default/zramswap
+    else
+        echo 'ALGO=zstd' >> /etc/default/zramswap
+    fi
+    # Restarting zramswap means swapoff, which pulls everything compressed
+    # in zram back into real RAM. If that is more than the box currently
+    # has free, the restart is what finally triggers the OOM killer. Only
+    # do it when there is clearly room; otherwise it waits for the reboot.
+    zram_used_kb=$(awk '$1 == "/dev/zram0" {print $4}' /proc/swaps 2>/dev/null)
+    mem_avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+    if [ "${zram_used_kb:-0}" -lt "$(( ${mem_avail_kb:-0} / 2 ))" ]; then
+        systemctl restart zramswap.service
+        echo "    zram now using zstd"
+    else
+        echo "    zram holds ${zram_used_kb}kB with only ${mem_avail_kb}kB available,"
+        echo "    so it wasn't restarted - zstd takes effect on the next reboot."
+    fi
+else
+    echo "    /etc/default/zramswap not found (zram-tools not installed?) - skipped."
 fi
 
+# The stock swappiness of 60 assumes swap is a slow disk. Backed by zram it
+# is compressed RAM, so leaning on it beats evicting page cache that then
+# has to be re-read off the SD card. page-cluster=0 turns off swap
+# readahead, which only wastes work when each read is this cheap.
+cat > /etc/sysctl.d/99-kcal-memory.conf << 'EOF'
+# Written by setup_pi_kiosk.sh - tuned for a zram-backed kiosk.
+vm.swappiness=100
+vm.page-cluster=0
+EOF
+sysctl -q --load=/etc/sysctl.d/99-kcal-memory.conf
+echo "    vm.swappiness=100, vm.page-cluster=0"
 # ---------- Console blanking ----------
 
 echo "==> Disabling console blanking"

@@ -267,7 +267,13 @@ and the `token.json` it produces into this project's folder on the Pi.
    until curl -s http://127.0.0.1:5000 > /dev/null; do sleep 1; done
    chromium-browser --kiosk --noerrdialogs --disable-infobars \
      --disable-session-crashed-bubble --check-for-update-interval=31536000 \
-     --incognito http://127.0.0.1:5000 &
+     --incognito \
+     --process-per-site --renderer-process-limit=1 \
+     --disable-features=site-per-process,IsolateOrigins,BackForwardCache,Translate \
+     --disable-background-networking --disable-sync --disable-component-update \
+     --disable-breakpad --disable-domain-reliability \
+     --js-flags=--max-old-space-size=64 \
+     http://127.0.0.1:5000 &
    ```
    ```
    chmod +x ~/.config/labwc/autostart
@@ -356,7 +362,13 @@ see what's happening at each stage.
      while true; do
        cage -- chromium-browser --kiosk --noerrdialogs --disable-infobars \
          --disable-session-crashed-bubble --check-for-update-interval=31536000 \
-         --no-memcheck --password-store=basic --incognito http://127.0.0.1:5000
+         --password-store=basic --incognito \
+         --process-per-site --renderer-process-limit=1 \
+         --disable-features=site-per-process,IsolateOrigins,BackForwardCache,Translate \
+         --disable-background-networking --disable-sync --disable-component-update \
+         --disable-breakpad --disable-domain-reliability \
+         --js-flags=--max-old-space-size=64 \
+         http://127.0.0.1:5000
        sleep 2
      done
    fi
@@ -377,7 +389,28 @@ see what's happening at each stage.
    ```
    grep -q consoleblank= /boot/firmware/cmdline.txt || sudo sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt
    ```
-7. **Force the screen resolution**, if the display comes up at the wrong
+7. **Tune memory if this is the 1GB board.** Chromium is the biggest
+   consumer and spends most of its life in swap, so how well swap
+   compresses sets the headroom. Switch zram from lz4 to zstd and lean on
+   it harder:
+   ```sh
+   grep -q '^ALGO=' /etc/default/zramswap \
+     && sudo sed -i 's/^ALGO=.*/ALGO=zstd/' /etc/default/zramswap \
+     || echo 'ALGO=zstd' | sudo tee -a /etc/default/zramswap
+   printf 'vm.swappiness=100\nvm.page-cluster=0\n' | sudo tee /etc/sysctl.d/99-kcal-memory.conf
+   sudo sysctl -q --load=/etc/sysctl.d/99-kcal-memory.conf
+   ```
+   Reboot to pick up the new algorithm. **Don't** `systemctl restart
+   zramswap` on a box already deep in swap — that does a `swapoff`, which
+   pulls everything compressed in zram back into real RAM, and if there
+   isn't room for it the restart is what finally triggers the OOM killer.
+
+   The Chromium flags in step 5 do the rest. `--process-per-site` with
+   `--renderer-process-limit=1`, plus Site Isolation off, collapse what is
+   otherwise a second renderer process; isolation earns its memory when a
+   browser visits arbitrary sites, not when a kiosk shows one trusted local
+   origin. Put it back if this Pi ever browses the open web.
+8. **Force the screen resolution**, if the display comes up at the wrong
    one (e.g. a small touchscreen defaulting to a much higher resolution
    than its native size, making everything look tiny/zoomed out). On
    Raspberry Pi OS Bookworm this is set via a kernel command-line
