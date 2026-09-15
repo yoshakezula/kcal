@@ -225,6 +225,23 @@ input {
   }
 }
 
+.tasks-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-muted);
+}
+
+.tasks-spinner {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-muted);
+  animation: spin 0.8s linear infinite;
+}
+
 @keyframes spin {
   from {
     transform: rotate(0deg);
@@ -2013,6 +2030,7 @@ body.settings-page {
   /* These two carry information (work in progress), so they keep
      running even when decorative motion is off. */
   #refreshBtn.spinning,
+  .tasks-spinner,
   .progress-bar::after {
     animation-duration: 0.7s !important;
     animation-iteration-count: infinite !important;

@@ -8,6 +8,10 @@
   ];
   const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
   const TOGGLE_TIMEOUT_MS = 15 * 1000;
+  // Tasks load on demand, when the Tasks popup is opened. This is how long
+  // a load stays good for, so closing and reopening the popup reads from
+  // memory instead of going back to the network.
+  const TASKS_FRESH_MS = 5 * 60 * 1000;
   const WEATHER_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
   const SLEEP_TIMEOUT_MS = 10 * 60 * 1000;
   const SWIPE_THRESHOLD_PX = 60;
@@ -248,8 +252,6 @@
     const range = fetchRange();
     currentRange = range;
     const url = `/api/events?start=${dateKey(range.start)}&end=${dateKey(range.end)}`;
-
-    loadTasksData(); // kick off in parallel; the Tasks overlay shouldn't wait on this, nor should events
 
     el.refreshBtn.classList.add("spinning");
     if (!silent) showLoading(true);
@@ -1202,6 +1204,7 @@
     pointsEnabled: false,
     loaded: false, // true once a load attempt (success or failure) has completed
     loadOk: false,
+    loadedAt: 0,   // Date.now() of the last successful load; 0 after a failure, so it retries
     // "listId:taskId" for every toggle waiting on the server. A row with a
     // toggle in flight ignores further taps, and a background reload holds
     // off entirely, so half-applied state never gets overwritten.
@@ -1308,10 +1311,9 @@
   }
 
   // Loads task lists + every enabled list's tasks, sharing one in-flight
-  // promise so a background prefetch (triggered on every calendar reload)
-  // and an overlay open racing it don't fire duplicate requests. Resolves
-  // `tasksPromise` back to null when done so the next calendar reload
-  // refetches fresh data instead of relying on a stale cache forever.
+  // promise so two opens in quick succession don't fire duplicate requests.
+  // Resolves `tasksPromise` back to null when done so a later open can
+  // refetch once the data has gone stale.
   function loadTasksData() {
     if (tasksPromise) return tasksPromise;
     // A reload replaces every column and task object wholesale. Doing that
@@ -1328,6 +1330,7 @@
         }
       } finally {
         taskState.loaded = true;
+        taskState.loadedAt = taskState.loadOk ? Date.now() : 0;
         tasksPromise = null;
         renderTasksOverlayIfOpen();
       }
@@ -1335,10 +1338,23 @@
     return tasksPromise;
   }
 
+  // Data from within TASKS_FRESH_MS is good enough to render straight away;
+  // anything older (or a previous failure) means going back to the server.
+  function tasksAreFresh() {
+    return taskState.loaded && taskState.loadOk && (Date.now() - taskState.loadedAt) < TASKS_FRESH_MS;
+  }
+
   async function openTasksOverlay() {
-    if (!taskState.loaded) {
-      openOverlay(`<h2>Tasks</h2><p>Loading&hellip;</p>`, { kind: "tasks" });
+    if (!tasksAreFresh()) {
+      openOverlay(
+        `<h2>Tasks</h2><div class="tasks-loading"><span class="tasks-spinner"></span>Loading&hellip;</div>`,
+        { kind: "tasks" }
+      );
       await loadTasksData();
+      // The fetch takes a couple of seconds against Google, which is long
+      // enough for the user to have closed the popup or opened something
+      // else over it. Don't yank the task list back on screen if so.
+      if (openOverlayKind !== "tasks") return;
     }
     if (!taskState.loadOk) {
       openOverlay(`<h2>Tasks</h2><p>Couldn't load task lists. Check Settings.</p>`, { kind: "tasks" });
